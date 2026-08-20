@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "57968316632",
+    "project_id": "testwebinarapp",
+    "storage_bucket": "testwebinarapp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:57968316632:android:c8f5563b6c599d34e2c7ad",
+        "android_client_info": {
+          "package_name": "com.webinarhub.lms"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA42NuyxkmcrbzuKQjK9ZJ_eBDDh9l-gEg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
