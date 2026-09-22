@@ -139,7 +139,7 @@ class _CertificatesPreviewScreenState extends State<CertificatesPreviewScreen> {
                       right: 20,
                       child: FloatingActionButton(
                         heroTag: "download",
-                        backgroundColor: AppColor.blueGrey,
+                        backgroundColor: AppColor.goldDark,
                         child: const Icon(Icons.download),
                         onPressed: () {
                           _downloadCertificates();

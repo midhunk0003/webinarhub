@@ -112,6 +112,9 @@ class UserDetailData {
   @JsonKey(fromJson: stringFromJson)
   String? updatedAt;
 
+  // Current logged-in user's course information UserCurrentUser? currentUser;
+  UserCurrentUser? currentUser;
+
   UserDetailData({
     this.id,
     this.title,
@@ -141,10 +144,41 @@ class UserDetailData {
     this.recordingCount,
     this.createdAt,
     this.updatedAt,
+    this.currentUser,
   });
 
   factory UserDetailData.fromJson(Map<String, dynamic> json) =>
       _$UserDetailDataFromJson(json);
 
   Map<String, dynamic> toJson() => _$UserDetailDataToJson(this);
+}
+
+@JsonSerializable()
+class UserCurrentUser {
+  @JsonKey(fromJson: stringFromJson)
+  String? isEnrolled;
+  @JsonKey(fromJson: stringFromJson)
+  String? enrollmentStatus;
+  @JsonKey(fromJson: stringFromJson)
+  String? enrollmentStatusName;
+  @JsonKey(fromJson: stringFromJson)
+  String? paymentStatus;
+  @JsonKey(fromJson: stringFromJson)
+  String? paymentStatusName;
+  @JsonKey(fromJson: stringFromJson)
+  String? canPay;
+  @JsonKey(fromJson: stringFromJson)
+  String? canJoin;
+  UserCurrentUser({
+    this.isEnrolled,
+    this.enrollmentStatus,
+    this.enrollmentStatusName,
+    this.paymentStatus,
+    this.paymentStatusName,
+    this.canPay,
+    this.canJoin,
+  });
+  factory UserCurrentUser.fromJson(Map<String, dynamic> json) =>
+      _$UserCurrentUserFromJson(json);
+  Map<String, dynamic> toJson() => _$UserCurrentUserToJson(this);
 }

@@ -1,32 +1,42 @@
 import 'package:flutter/material.dart';
 import 'package:lms/core/failure.dart';
 import 'package:lms/core/success.dart';
+import 'package:lms/data/model/profile_model/profile_model.dart';
 import 'package:lms/data/model/trainer_over_view_model/trainer_over_view_model.dart';
 import 'package:lms/data/model/trainer_upcomming_and_assigned_model/trainer_upcomming_and_assigned_model.dart';
+import 'package:lms/domain/repository/profile_repository.dart';
 import 'package:lms/domain/repository/trainer_repo/trainer_dashboard_repository.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class TrainerDashboardProvider extends ChangeNotifier {
   final TrainerDashboardRepository trainerDashboardRepository;
-
-  TrainerDashboardProvider({required this.trainerDashboardRepository});
+  final ProfileRepository profileRepository;
+  TrainerDashboardProvider({
+    required this.trainerDashboardRepository,
+    required this.profileRepository,
+  });
 
   bool _isLoading = false;
   bool _isLoadingOverView = false;
+  bool _isLoadingProfile = false;
   Failure? _failure;
   Success? _success;
   TrainerUpcommingAndAssignedModel? _trainerUpcommingAndAssignedModel;
   TrainerOverViewModel? _trainerOverViewModel;
+  ProfileModel? _profileModel;
 
   // getter
 
   bool get isLoading => _isLoading;
   bool get isLoadingOverView => _isLoadingOverView;
+  bool get isLoadingProfile => _isLoadingProfile;
   Failure? get failure => _failure;
   Success? get success => _success;
   TrainerUpcommingAndAssignedModel? get trainerUpcommingAndAssignedModel =>
       _trainerUpcommingAndAssignedModel;
   TrainerOverViewModel? get trainerOverViewModel => _trainerOverViewModel;
+  ProfileModel? get profileModel => _profileModel;
 
   // functions
 
@@ -77,6 +87,27 @@ class TrainerDashboardProvider extends ChangeNotifier {
       (success) {
         _trainerOverViewModel = success;
         _isLoadingOverView = false;
+        notifyListeners();
+      },
+    );
+  }
+
+  Future<void> getProfilePro() async {
+    _isLoadingProfile = true;
+    _failure = null;
+    _success = null;
+    notifyListeners();
+
+    final result = await profileRepository.getProfileData();
+    result.fold(
+      (failure) {
+        _failure = failure;
+        _isLoadingProfile = false;
+        notifyListeners();
+      },
+      (success) {
+        _profileModel = success;
+        _isLoadingProfile = false;
         notifyListeners();
       },
     );

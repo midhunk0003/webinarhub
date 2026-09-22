@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lms/core/failure.dart';
 import 'package:lms/core/success.dart';
+import 'package:lms/data/model/get_notification_count_model/get_notification_count_model.dart';
 import 'package:lms/data/model/notification_model/notification_model.dart';
 import 'package:lms/data/model/trainer_full_list_webinar_model/trainer_full_list_webinar_model.dart';
 import 'package:lms/data/model/trainer_over_view_model/trainer_over_view_model.dart';
@@ -15,20 +16,25 @@ class TrainerAllWebinarProvider extends ChangeNotifier {
   TrainerAllWebinarProvider({required this.trainerWebinarRepository});
 
   bool _isLoading = false;
+  bool _isLoadingCount = false;
   Failure? _failure;
   Success? _success;
   TrainerFullListWebinarModel? _trainerFullListWebinarModel;
   NotificationModel? _notificationModel;
+  GetNotificationCountModel? _getNotificationCountModel;
 
   // getter
 
   bool get isLoading => _isLoading;
+  bool get isLoadingCount => _isLoadingCount;
   Failure? get failure => _failure;
   Success? get success => _success;
   TrainerFullListWebinarModel? get trainerFullListWebinarModel =>
       _trainerFullListWebinarModel;
 
   NotificationModel? get notificationModel => _notificationModel;
+  GetNotificationCountModel? get getNotificationCountModel =>
+      _getNotificationCountModel;
 
   // functions
 
@@ -112,5 +118,25 @@ class TrainerAllWebinarProvider extends ChangeNotifier {
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       throw Exception('Could not launch Zoom meeting');
     }
+  }
+
+  Future<void> getNotificationCountPro() async {
+    _isLoadingCount = true;
+    _failure = null;
+    _success = null;
+    notifyListeners();
+    final result = await trainerWebinarRepository.getNotificationCount();
+    result.fold(
+      (failure) {
+        _failure = failure;
+        _isLoadingCount = false;
+        notifyListeners();
+      },
+      (success) {
+        _getNotificationCountModel = success;
+        _isLoadingCount = false;
+        notifyListeners();
+      },
+    );
   }
 }

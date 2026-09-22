@@ -42,4 +42,26 @@
         <item name="android:windowLightNavigationBar">false</item>
 
     </style>
+    
+    <!-- ================================================= -->
+    <!-- Zoom Activity Theme                               -->
+    <!-- ================================================= -->
+
+    <style
+        name="Theme.ZoomActivity"
+        parent="Theme.AppCompat.Light.NoActionBar">
+
+        <item name="android:windowNoTitle">
+            true
+        </item>
+
+        <item name="android:windowActionModeOverlay">
+            true
+        </item>
+
+        <item name="android:windowBackground">
+            @android:color/white
+        </item>
+
+    </style>
 </resources>

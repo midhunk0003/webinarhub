@@ -8,12 +8,15 @@
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+        
     <application
-        android:label="lms"
+        android:label="WWITPL"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:hardwareAccelerated="true"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="false">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -42,9 +45,15 @@
             android:name=".VideoPlayerActivity"
             android:exported="false"
             android:theme="@style/VideoPlayerTheme"
-            android:screenOrientation="sensorLandscape"
+            android:screenOrientation="unspecified"
             android:configChanges="orientation|screenSize|keyboardHidden"
-            android:windowSoftInputMode="adjustNothing" />     
+            android:windowSoftInputMode="adjustNothing" />
+        <activity
+            android:name=".ZoomActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:hardwareAccelerated="true" 
+            android:theme="@style/Theme.ZoomActivity" />            
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

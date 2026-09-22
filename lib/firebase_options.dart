@@ -50,19 +50,19 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyA42NuyxkmcrbzuKQjK9ZJ_eBDDh9l-gEg',
-    appId: '1:57968316632:android:c8f5563b6c599d34e2c7ad',
-    messagingSenderId: '57968316632',
-    projectId: 'testwebinarapp',
-    storageBucket: 'testwebinarapp.firebasestorage.app',
+    apiKey: 'AIzaSyDW0mgwq3CC4iJBh9_Cz4T-oHt6RGknPTQ',
+    appId: '1:878948083794:android:7eb06b2509529bf9a4d78b',
+    messagingSenderId: '878948083794',
+    projectId: 'wwitplwebinarapp',
+    storageBucket: 'wwitplwebinarapp.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyBouB7vS-Yz6H99EPeXr4PlYQMPwH47uOU',
-    appId: '1:57968316632:ios:2d11bb6fc5e70302e2c7ad',
-    messagingSenderId: '57968316632',
-    projectId: 'testwebinarapp',
-    storageBucket: 'testwebinarapp.firebasestorage.app',
+    apiKey: 'AIzaSyARsDRR52j2RQm8UQE9AdbMz8yaD5HOjQQ',
+    appId: '1:878948083794:ios:6bd15f23843dbc2fa4d78b',
+    messagingSenderId: '878948083794',
+    projectId: 'wwitplwebinarapp',
+    storageBucket: 'wwitplwebinarapp.firebasestorage.app',
     iosBundleId: 'com.webinarhub.lms',
   );
 }

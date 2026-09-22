@@ -8,6 +8,7 @@ abstract class AuthRepository {
     String? password,
     String? fcmToken,
   );
+
   Future<Either<Failure, LoginModel>> Register(
     String? name,
     String? email,

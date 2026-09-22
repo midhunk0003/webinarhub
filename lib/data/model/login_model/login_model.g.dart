@@ -36,6 +36,7 @@ Data _$DataFromJson(Map<String, dynamic> json) => Data(
       json['user'] == null
           ? null
           : User.fromJson(json['user'] as Map<String, dynamic>),
+  requiresPolicyAcceptance: stringFromJson(json['requiresPolicyAcceptance']),
 );
 
 Map<String, dynamic> _$DataToJson(Data instance) => <String, dynamic>{
@@ -43,6 +44,7 @@ Map<String, dynamic> _$DataToJson(Data instance) => <String, dynamic>{
   'refreshToken': instance.refreshToken,
   'accessTokenExpiry': instance.accessTokenExpiry,
   'user': instance.user,
+  'requiresPolicyAcceptance': instance.requiresPolicyAcceptance,
 };
 
 User _$UserFromJson(Map<String, dynamic> json) => User(

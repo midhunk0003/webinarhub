@@ -141,7 +141,10 @@ class _TrainerNotificationScreenState extends State<TrainerNotificationScreen> {
 
           return RefreshIndicator(
             onRefresh: _refresh,
-            color: AppColor.formPrimaryColor,
+
+            // GOLD REFRESH INDICATOR
+            color: AppColor.gold,
+
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.only(bottom: 100),
@@ -224,7 +227,11 @@ class _TrainerNotificationScreenState extends State<TrainerNotificationScreen> {
                         if (provider.isLoading) {
                           return const Padding(
                             padding: EdgeInsets.symmetric(vertical: 70),
-                            child: Center(child: CircularProgressIndicator()),
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                color: AppColor.gold,
+                              ),
+                            ),
                           );
                         }
 
@@ -265,10 +272,13 @@ class _TrainerNotificationScreenState extends State<TrainerNotificationScreen> {
                                       print('is read');
                                       return;
                                     }
+
                                     await provider.markAsReadNotification(
                                       notifications[index].id.toString(),
                                     );
-
+                                    await _loadNotifications();
+                                    provider.getNotificationCountPro();
+                                    provider.clearFailure();
                                     if (!mounted) return;
                                   },
                                 ),
@@ -306,49 +316,69 @@ class _NotificationHeader extends StatelessWidget {
       width: double.infinity,
       padding: EdgeInsets.all(isTablet ? 22 : 18),
       decoration: BoxDecoration(
+        // BLACK + GOLD GLASS GRADIENT
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            AppColor.formPrimaryColor.withOpacity(0.18),
-            AppColor.formSecondaryColor.withOpacity(0.18),
+            AppColor.goldDark.withOpacity(0.12),
+            AppColor.gold.withOpacity(0.06),
+            AppColor.background.withOpacity(0.90),
           ],
         ),
+
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColor.formPrimaryColor.withOpacity(0.14)),
+
+        // GOLD BORDER
+        border: Border.all(color: AppColor.gold.withOpacity(0.25)),
+
         boxShadow: [
           BoxShadow(
-            color: AppColor.formPrimaryColor.withOpacity(0.06),
-            blurRadius: 14,
-            offset: const Offset(0, 5),
+            color: AppColor.gold.withOpacity(0.08),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
+
       child: Row(
         children: [
+          // ==========================================================
           // ICON
+          // ==========================================================
           Container(
             width: isTablet ? 54 : 48,
             height: isTablet ? 54 : 48,
+
             decoration: BoxDecoration(
               gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
                 colors: [
-                  AppColor.formPrimaryColor.withOpacity(0.18),
-                  AppColor.formSecondaryColor.withOpacity(0.18),
+                  AppColor.goldDark.withOpacity(0.25),
+                  AppColor.gold.withOpacity(0.12),
                 ],
               ),
               borderRadius: BorderRadius.circular(14),
+
+              border: Border.all(color: AppColor.gold.withOpacity(0.20)),
             ),
+
             child: Icon(
               Icons.notifications_rounded,
-              color: AppColor.formPrimaryColor,
+
+              // GOLD ICON
+              color: AppColor.goldLight,
+
               size: isTablet ? 28 : 25,
             ),
           ),
 
           const SizedBox(width: 14),
 
+          // ==========================================================
           // TITLE
+          // ==========================================================
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -356,18 +386,20 @@ class _NotificationHeader extends StatelessWidget {
                 Text(
                   'Notifications',
                   style: TextStyle(
-                    color: AppColor.ghostwhite,
+                    color: AppColor.primaryText,
                     fontSize: isTablet ? 20 : 18,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
+
                 const SizedBox(height: 4),
+
                 Text(
                   'Stay updated with your latest activities',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: AppColor.ghostwhite.withOpacity(0.65),
+                    color: AppColor.secondaryText.withOpacity(0.70),
                     fontSize: isTablet ? 14 : 12,
                     fontWeight: FontWeight.w500,
                   ),
@@ -398,11 +430,15 @@ class _NotificationTabs extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(5),
+
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
+        color: AppColor.cardBackground,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.10)),
+
+        // GOLD BORDER
+        border: Border.all(color: AppColor.gold.withOpacity(0.18)),
       ),
+
       child: Row(
         children: [
           _TabItem(
@@ -411,12 +447,14 @@ class _NotificationTabs extends StatelessWidget {
             isSelected: selectedIndex == 0,
             onTap: () => onChanged(0),
           ),
+
           _TabItem(
             title: 'Unread',
             icon: Icons.mark_email_unread_outlined,
             isSelected: selectedIndex == 1,
             onTap: () => onChanged(1),
           ),
+
           _TabItem(
             title: 'Read',
             icon: Icons.mark_email_read_outlined,
@@ -451,34 +489,48 @@ class _TabItem extends StatelessWidget {
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
+
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 250),
+
           padding: const EdgeInsets.symmetric(vertical: 11),
+
           decoration: BoxDecoration(
+            // SELECTED = GOLD GRADIENT
             gradient:
                 isSelected
-                    ? LinearGradient(
-                      colors: [
-                        AppColor.formPrimaryColor.withOpacity(0.85),
-                        AppColor.formSecondaryColor.withOpacity(0.85),
-                      ],
+                    ? const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: AppColor.goldGradient,
                     )
                     : null,
+
             borderRadius: BorderRadius.circular(10),
           ),
+
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
                 icon,
                 size: 18,
-                color: isSelected ? Colors.white : Colors.white54,
+
+                color:
+                    isSelected
+                        ? AppColor.buttonText
+                        : AppColor.secondaryText.withOpacity(0.65),
               ),
+
               const SizedBox(width: 6),
+
               Text(
                 title,
                 style: TextStyle(
-                  color: isSelected ? Colors.white : Colors.white60,
+                  color:
+                      isSelected
+                          ? AppColor.buttonText
+                          : AppColor.secondaryText.withOpacity(0.65),
                   fontSize: 13,
                   fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                 ),
@@ -529,42 +581,57 @@ class _NotificationCard extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
+
+      borderRadius: BorderRadius.circular(18),
+
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
+
         width: double.infinity,
+
         padding: EdgeInsets.all(isTablet ? 20 : 16),
+
         decoration: BoxDecoration(
+          // ======================================================
+          // CARD GRADIENT
+          // ======================================================
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
+
             colors:
                 isRead
                     ? [
-                      AppColor.formPrimaryColor.withOpacity(0.10),
-                      AppColor.formSecondaryColor.withOpacity(0.10),
+                      AppColor.cardBackground.withOpacity(0.6),
+                      AppColor.formSecondaryColor.withOpacity(0.6),
                     ]
-                    : [
-                      AppColor.formPrimaryColor.withOpacity(0.24),
-                      AppColor.formSecondaryColor.withOpacity(0.24),
-                    ],
+                    : [AppColor.cardBackground, AppColor.formSecondaryColor],
           ),
+
           borderRadius: BorderRadius.circular(18),
+
+          // ======================================================
+          // GOLD BORDER
+          // ======================================================
           border: Border.all(
             color:
                 isRead
-                    ? Colors.white.withOpacity(0.08)
-                    : AppColor.formPrimaryColor.withOpacity(0.22),
+                    ? AppColor.gold.withOpacity(0.12)
+                    : AppColor.gold.withOpacity(0.35),
           ),
+
+          // ======================================================
+          // GOLD SHADOW FOR UNREAD
+          // ======================================================
           boxShadow: [
             BoxShadow(
-              color: AppColor.formPrimaryColor.withOpacity(
-                isRead ? 0.03 : 0.07,
-              ),
+              color: AppColor.gold.withOpacity(isRead ? 0.02 : 0.07),
               blurRadius: 14,
               offset: const Offset(0, 5),
             ),
           ],
         ),
+
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -574,20 +641,39 @@ class _NotificationCard extends StatelessWidget {
             Container(
               width: isTablet ? 54 : 48,
               height: isTablet ? 54 : 48,
+
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [
-                    AppColor.formPrimaryColor.withOpacity(isRead ? 0.10 : 0.20),
-                    AppColor.formSecondaryColor.withOpacity(
-                      isRead ? 0.10 : 0.20,
-                    ),
-                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+
+                  colors:
+                      isRead
+                          ? [
+                            AppColor.goldDark.withOpacity(0.10),
+                            AppColor.gold.withOpacity(0.05),
+                          ]
+                          : [
+                            AppColor.goldDark.withOpacity(0.25),
+                            AppColor.gold.withOpacity(0.12),
+                          ],
                 ),
+
                 borderRadius: BorderRadius.circular(14),
+
+                border: Border.all(
+                  color: AppColor.gold.withOpacity(isRead ? 0.10 : 0.22),
+                ),
               ),
+
               child: Icon(
                 _getEventIcon(event),
-                color: AppColor.formPrimaryColor,
+
+                color:
+                    isRead
+                        ? AppColor.goldSoft.withOpacity(0.65)
+                        : AppColor.goldLight,
+
                 size: isTablet ? 27 : 24,
               ),
             ),
@@ -601,7 +687,9 @@ class _NotificationCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // ======================================================
                   // TITLE + UNREAD DOT
+                  // ======================================================
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -610,8 +698,9 @@ class _NotificationCard extends StatelessWidget {
                           title,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
+
                           style: TextStyle(
-                            color: AppColor.ghostwhite,
+                            color: AppColor.primaryText,
                             fontSize: isTablet ? 17 : 15,
                             fontWeight:
                                 isRead ? FontWeight.w600 : FontWeight.w800,
@@ -619,21 +708,27 @@ class _NotificationCard extends StatelessWidget {
                         ),
                       ),
 
+                      // ==================================================
+                      // UNREAD DOT
+                      // ==================================================
                       if (!isRead) ...[
                         const SizedBox(width: 8),
+
                         Container(
                           width: 9,
                           height: 9,
+
                           margin: const EdgeInsets.only(top: 5),
+
                           decoration: BoxDecoration(
-                            color: AppColor.formPrimaryColor,
+                            color: AppColor.goldLight,
                             shape: BoxShape.circle,
+
                             boxShadow: [
                               BoxShadow(
-                                color: AppColor.formPrimaryColor.withOpacity(
-                                  0.4,
-                                ),
-                                blurRadius: 6,
+                                color: AppColor.gold.withOpacity(0.50),
+                                blurRadius: 7,
+                                spreadRadius: 1,
                               ),
                             ],
                           ),
@@ -644,14 +739,17 @@ class _NotificationCard extends StatelessWidget {
 
                   const SizedBox(height: 7),
 
+                  // ======================================================
                   // MESSAGE
+                  // ======================================================
                   Text(
                     message,
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
+
                     style: TextStyle(
-                      color: AppColor.ghostwhite.withOpacity(
-                        isRead ? 0.60 : 0.75,
+                      color: AppColor.secondaryText.withOpacity(
+                        isRead ? 0.60 : 0.78,
                       ),
                       fontSize: isTablet ? 14 : 13,
                       height: 1.4,
@@ -661,36 +759,49 @@ class _NotificationCard extends StatelessWidget {
 
                   const SizedBox(height: 12),
 
+                  // ======================================================
                   // BOTTOM INFORMATION
+                  // ======================================================
                   Row(
                     children: [
+                      // ==================================================
                       // EVENT
+                      // ==================================================
                       Flexible(
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 9,
                             vertical: 5,
                           ),
+
                           decoration: BoxDecoration(
-                            color: AppColor.formPrimaryColor.withOpacity(0.09),
+                            color: AppColor.gold.withOpacity(0.09),
                             borderRadius: BorderRadius.circular(8),
+
+                            border: Border.all(
+                              color: AppColor.gold.withOpacity(0.10),
+                            ),
                           ),
+
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
                                 Icons.label_outline_rounded,
                                 size: 13,
-                                color: AppColor.formPrimaryColor,
+                                color: AppColor.goldLight,
                               ),
+
                               const SizedBox(width: 5),
+
                               Flexible(
                                 child: Text(
                                   event,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
+
                                   style: TextStyle(
-                                    color: AppColor.formPrimaryColor,
+                                    color: AppColor.goldLight,
                                     fontSize: 10,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -703,7 +814,9 @@ class _NotificationCard extends StatelessWidget {
 
                       const SizedBox(width: 8),
 
+                      // ==================================================
                       // DATE
+                      // ==================================================
                       Flexible(
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -711,16 +824,21 @@ class _NotificationCard extends StatelessWidget {
                             Icon(
                               Icons.access_time_rounded,
                               size: 14,
-                              color: AppColor.ghostwhite.withOpacity(0.45),
+                              color: AppColor.secondaryText.withOpacity(0.45),
                             ),
+
                             const SizedBox(width: 4),
+
                             Flexible(
                               child: Text(
                                 createdAt,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
+
                                 style: TextStyle(
-                                  color: AppColor.ghostwhite.withOpacity(0.50),
+                                  color: AppColor.secondaryText.withOpacity(
+                                    0.50,
+                                  ),
                                   fontSize: 10,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -841,57 +959,85 @@ class _EmptyNotifications extends StatelessWidget {
 
     return Container(
       width: double.infinity,
+
       margin: const EdgeInsets.symmetric(horizontal: 0),
+
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 55),
+
       decoration: BoxDecoration(
+        // ======================================================
+        // EMPTY CARD GOLD GRADIENT
+        // ======================================================
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            AppColor.formPrimaryColor.withOpacity(0.10),
-            AppColor.formSecondaryColor.withOpacity(0.10),
+            AppColor.goldDark.withOpacity(0.10),
+            AppColor.cardBackground,
+            AppColor.formSecondaryColor,
           ],
         ),
+
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColor.formPrimaryColor.withOpacity(0.12)),
+
+        border: Border.all(color: AppColor.gold.withOpacity(0.18)),
       ),
+
       child: Column(
         children: [
+          // ======================================================
+          // EMPTY ICON
+          // ======================================================
           Container(
             width: 76,
             height: 76,
+
             decoration: BoxDecoration(
               gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
                 colors: [
-                  AppColor.formPrimaryColor.withOpacity(0.14),
-                  AppColor.formSecondaryColor.withOpacity(0.14),
+                  AppColor.goldDark.withOpacity(0.18),
+                  AppColor.gold.withOpacity(0.08),
                 ],
               ),
+
               shape: BoxShape.circle,
+
+              border: Border.all(color: AppColor.gold.withOpacity(0.18)),
             ),
-            child: Icon(icon, size: 38, color: AppColor.formPrimaryColor),
+
+            child: Icon(icon, size: 38, color: AppColor.goldLight),
           ),
 
           const SizedBox(height: 18),
 
+          // ======================================================
+          // TITLE
+          // ======================================================
           Text(
             title,
             textAlign: TextAlign.center,
+
             style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w700,
-              color: Colors.white,
+              color: AppColor.primaryText,
             ),
           ),
 
           const SizedBox(height: 7),
 
+          // ======================================================
+          // MESSAGE
+          // ======================================================
           Text(
             message,
             textAlign: TextAlign.center,
+
             style: TextStyle(
               fontSize: 13,
-              color: Colors.white.withOpacity(0.55),
+              color: AppColor.secondaryText.withOpacity(0.55),
             ),
           ),
         ],

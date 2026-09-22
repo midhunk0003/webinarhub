@@ -1,9 +1,11 @@
 class ApiEndPoint {
+  // static const String baseUrl = "http://57.128.119.77:8080/api/";
   static const String baseUrl =
-      "https://1e1d-2405-201-e018-b0-e0b5-4327-fd35-6148.ngrok-free.app/api/";
+      "https://bdb9-2405-201-e018-b0-14e4-f55f-f9fb-efd3.ngrok-free.app/api/";
 
+  // static const String serverUrl = 'http://57.128.119.77:8080/';
   static const String serverUrl =
-      'https://1e1d-2405-201-e018-b0-e0b5-4327-fd35-6148.ngrok-free.app/';
+      'https://bdb9-2405-201-e018-b0-14e4-f55f-f9fb-efd3.ngrok-free.app';
 
   // login and register
   static const String loginEndPoint = "Auth/login";
@@ -24,6 +26,9 @@ class ApiEndPoint {
 
   static const String webinarParticipantsEndPoint =
       "WebinarParticipants/participants";
+
+  static const String trainerWebinarRecordingsEndPoint =
+      "WebinarRecordings/recordings";
 
   // permission
   static const String permissionEndPoint = "Users/permissions";
@@ -46,4 +51,35 @@ class ApiEndPoint {
   // profile
   static const String profileEndPoint = "Users/me";
   static const String updateProfileEndPoint = "Users/me";
+
+  // change password
+  static const String changePasswordEndPoint = "Auth/change-password";
+
+  // profile image
+  static const String profileImageEndPoint = "Users/profile-image";
+
+  ///unread-count
+  static const String unreadCountEndPoint = "Notifications/me/unread-count";
+
+  // get contact
+
+  static const String contactUsEndPoint = "ContactUs";
+
+  // get policy
+
+  static const String userPolicyEndPoint = "UserPolicies/active";
+
+  //accept policy
+
+  static const String userPolicyAcceptEndPoint = "UserPolicies/accept";
+
+  // payment
+  static const String paymentGateWayAvailableEndPoint =
+      "payment-gateways/available";
+
+  // create payment order
+  static const String createPaymentOrderEndPoint = "Payments/orders";
+
+  // verify payment
+  static const String paymentsVerifyEndPoint = "Payments/verify";
 }

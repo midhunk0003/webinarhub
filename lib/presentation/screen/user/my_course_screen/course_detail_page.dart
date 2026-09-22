@@ -508,7 +508,7 @@ void showEnrollmentSuccessDialog(
                       gradient: LinearGradient(
                         begin: Alignment.centerLeft,
                         end: Alignment.centerRight,
-                        colors: AppColor.primaryBlueGradient,
+                        colors: AppColor.goldGradient,
                       ),
                     ),
                     child: const Icon(

@@ -67,6 +67,7 @@ class LanguageAndOtherWIdget extends StatelessWidget {
                   width: 18,
                   height: 18,
                   '${svgIcon ?? ''}',
+                  color: AppColor.gold,
                 ),
               ),
             ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:lms/core/colors.dart';
 import 'package:lms/core/failure.dart';
 import 'package:lms/presentation/provider/user_provider/profile_provider.dart';
@@ -7,6 +8,7 @@ import 'package:lms/presentation/screen/user/home_screen/widgets/home_header_sec
 import 'package:lms/presentation/screen/user/my_profile_screen/widgets/logout_function_method.dart';
 import 'package:lms/presentation/screen/user/my_profile_screen/widgets/myprofile_menu_list_widget.dart';
 import 'package:lms/presentation/widgets/common_custom_app_bar_widget.dart';
+import 'package:lms/presentation/widgets/common_custome_button_widget.dart';
 import 'package:lms/presentation/widgets/diloges/app_dialog_helper.dart';
 import 'package:lms/presentation/widgets/reusablebackground/reusablebackground.dart';
 import 'package:provider/provider.dart';
@@ -110,12 +112,139 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                                   ?.profileImageUrl,
                           showNotificationIcon: false,
                           showProfileImage: true,
+                          onTapImage: () {
+                            print('Profile Image Tapped');
+                            showModalBottomSheet(
+                              context: context,
+                              backgroundColor: Colors.transparent,
+                              builder: (context) {
+                                return Container(
+                                  padding: const EdgeInsets.all(20),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.vertical(
+                                      top: Radius.circular(24),
+                                    ),
+                                  ),
+                                  child: SafeArea(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        // Drag handle
+                                        Container(
+                                          width: 40,
+                                          height: 4,
+                                          margin: const EdgeInsets.only(
+                                            bottom: 20,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey.shade300,
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
+                                        ),
+
+                                        const Text(
+                                          'Change Profile Photo',
+                                          style: TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+
+                                        const SizedBox(height: 20),
+
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: _ProfileImageOption(
+                                                icon: Icons.camera_alt_outlined,
+                                                title: 'Camera',
+                                                onTap: () {
+                                                  Navigator.pop(context);
+
+                                                  // Open camera
+                                                  print('Open Camera');
+                                                  profileProvider
+                                                      .pickProfileImage(
+                                                        ImageSource.camera,
+                                                      );
+                                                },
+                                              ),
+                                            ),
+
+                                            const SizedBox(width: 16),
+
+                                            Expanded(
+                                              child: _ProfileImageOption(
+                                                icon:
+                                                    Icons
+                                                        .photo_library_outlined,
+                                                title: 'Gallery',
+                                                onTap: () {
+                                                  Navigator.pop(context);
+
+                                                  // Open gallery
+                                                  print('Open Gallery');
+                                                  profileProvider
+                                                      .pickProfileImage(
+                                                        ImageSource.gallery,
+                                                      );
+                                                },
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+
+                                        const SizedBox(height: 10),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          },
                         ),
+                    const SizedBox(height: 16),
+                    // Show only after selecting an image
+                    if (profileProvider.selectedProfileImage != null)
+                      SizedBox(
+                        width: double.infinity,
+                        child: CommonCustomeButtonWidget(
+                          isTablet: _isTablet,
+                          text:
+                              profileProvider.isLoadingProfileImage
+                                  ? "Uploading..."
+                                  : "Upload Profile Image",
+                          onTap: () async {
+                            await profileProvider.uploadProfileImage();
+                            if (!mounted) return;
+                            if (profileProvider.success != null) {
+                              AppDialogHelper.showSuccessDialog(
+                                context: context,
+                                message: profileProvider.success?.message ?? '',
+                                provider: profileProvider,
+                                onTap: () {
+                                  profileProvider.clearFailure();
+                                  profileProvider.clearSuccess();
+                                  profileProvider.clearSelectedFile();
+                                  Navigator.pop(context);
+                                },
+                              );
+                              await profileProvider.getProfilePro();
+                            } else if (profileProvider.failure != null) {
+                              _handleFailure(profileProvider);
+                            }
+                          },
+                        ),
+                      ),
+
                     SizedBox(height: _isTablet ? 45 : 40),
                     Text(
                       'Account',
                       style: TextStyle(
-                        color: AppColor.blueGrey,
+                        color: AppColor.ghostwhite,
                         fontSize: _isTablet ? 15 : 12,
                         fontFamily: 'Urbanist',
                         fontWeight: FontWeight.w500,
@@ -157,7 +286,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                     Text(
                       'General',
                       style: TextStyle(
-                        color: AppColor.blueGrey,
+                        color: AppColor.ghostwhite,
                         fontSize: _isTablet ? 15 : 12,
                         fontFamily: 'Urbanist',
                         fontWeight: FontWeight.w500,
@@ -192,6 +321,19 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                       trailingIcon: Icons.arrow_forward_ios,
                       onTap: () {
                         print('Contact Us');
+                        Navigator.pushNamed(context, '/contactusscreen');
+                      },
+                    ),
+
+                    SizedBox(height: _isTablet ? 18 : 16),
+                    MyProfileMenuListWidget(
+                      isTablet: _isTablet,
+                      iconPath: 'assets/svg/changepassword.svg',
+                      title: 'Change Password',
+                      trailingIcon: Icons.arrow_forward_ios,
+                      onTap: () {
+                        print('Change Password');
+                        Navigator.pushNamed(context, '/changepassword');
                       },
                     ),
 
@@ -279,4 +421,44 @@ Widget _buildShimmerHeader() {
       ],
     ),
   );
+}
+
+class _ProfileImageOption extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+
+  const _ProfileImageOption({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, size: 30, color: AppColor.gold),
+
+            const SizedBox(height: 8),
+
+            Text(
+              title,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

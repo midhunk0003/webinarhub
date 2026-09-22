@@ -53,7 +53,12 @@ class MyProfileMenuListWidget extends StatelessWidget {
           children: [
             Row(
               children: [
-                SvgPicture.asset('${iconPath ?? ''}'),
+                SvgPicture.asset(
+                  '${iconPath ?? ''}',
+                  width: 16,
+                  height: 16,
+                  color: AppColor.gold,
+                ),
                 SizedBox(width: 12),
                 Text(
                   '${title ?? ''}',

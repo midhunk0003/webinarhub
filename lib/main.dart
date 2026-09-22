@@ -5,9 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:lms/core/dependence_injection.dart';
 import 'package:lms/core/navigator_service.dart';
 import 'package:lms/core/services/file_download_service.dart';
+import 'package:lms/domain/repository/payment_repository.dart';
 import 'package:lms/firebase_options.dart';
 import 'package:lms/firebasemessagingservice.dart';
 import 'package:lms/presentation/provider/auth_provider.dart';
+import 'package:lms/presentation/provider/payment_provider.dart';
 import 'package:lms/presentation/provider/permission_provider.dart';
 import 'package:lms/presentation/provider/trainer_provider/trainer_all_webinar_provider.dart';
 import 'package:lms/presentation/provider/trainer_provider/trainer_course_provider.dart';
@@ -28,6 +30,8 @@ import 'package:lms/presentation/screen/user/certificates/certificates_preview_s
 import 'package:lms/presentation/screen/user/home_screen/user_home_screen.dart';
 import 'package:lms/presentation/screen/user/my_course_screen/course_detail_page.dart';
 import 'package:lms/presentation/screen/user/my_course_screen/lecture_screen.dart';
+import 'package:lms/presentation/screen/user/my_profile_screen/change_password_screen.dart';
+import 'package:lms/presentation/screen/user/my_profile_screen/contact_us_screen.dart';
 import 'package:lms/presentation/screen/user/my_profile_screen/edit_profile_screen.dart';
 import 'package:lms/presentation/screen/user/my_profile_screen/help_center_screen.dart';
 import 'package:lms/presentation/screen/user/my_profile_screen/my_cart_screen.dart';
@@ -108,17 +112,21 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(
           create: (_) => getIt<TrainerDashboardProvider>(),
         ),
+
         // trainer
         ChangeNotifierProvider(create: (_) => getIt<PermissionProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<UserAllWbinarProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<UserCourseProvider>()),
         ChangeNotifierProvider(create: (_) => getIt<ProfileProvider>()),
+
+        // payment
+        ChangeNotifierProvider(create: (_) => getIt<PaymentProvider>()),
       ],
 
       child: MaterialApp(
         navigatorKey: NavigationService.navigatorKey,
         debugShowCheckedModeBanner: false,
-        title: 'IPO LMS',
+        title: 'WWITPL',
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         ),
@@ -186,6 +194,11 @@ class MyApp extends StatelessWidget {
               return _customPageRoute(
                 UserWebinarCourseDetailPage(courseId: courseId),
               );
+
+            case '/changepassword':
+              return _customPageRoute(ChangePasswordScreen());
+            case '/contactusscreen':
+              return _customPageRoute(ContactUsScreen());
             default:
               return null;
           }

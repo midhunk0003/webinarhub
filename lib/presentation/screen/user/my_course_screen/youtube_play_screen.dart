@@ -60,8 +60,8 @@ class _YoutubePlayerScreenState extends State<YoutubePlayerScreen> {
         showVideoProgressIndicator: true,
         progressIndicatorColor: Colors.red,
         progressColors: const ProgressBarColors(
-          playedColor: AppColor.primaryBlueMid,
-          handleColor: AppColor.primaryBlueLight,
+          playedColor: AppColor.goldDark,
+          handleColor: AppColor.goldLight,
           bufferedColor: Colors.grey,
           backgroundColor: Colors.black26,
         ),
@@ -155,7 +155,7 @@ class _YoutubePlayerScreenState extends State<YoutubePlayerScreen> {
                                 label: const Text("Mark as Completed"),
                                 style: FilledButton.styleFrom(
                                   minimumSize: const Size(double.infinity, 52),
-                                  backgroundColor: AppColor.primaryBlueMid,
+                                  backgroundColor: AppColor.goldDark,
                                 ),
                               ),
 

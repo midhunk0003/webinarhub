@@ -28,7 +28,9 @@ class SocialMediaSignupIconWidget extends StatelessWidget {
           ),
         ],
       ),
-      child: Center(child: SvgPicture.asset('${iconImage}' ?? '')),
+      child: Center(
+        child: SvgPicture.asset('${iconImage}' ?? '', color: AppColor.gold),
+      ),
     );
   }
 }

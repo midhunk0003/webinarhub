@@ -5,6 +5,7 @@ import 'package:lms/data/model/trainer_all_webinar_participents_model/trainer_al
 import 'package:lms/data/model/trainer_course_detail_page/trainer_course_detail_page.dart';
 import 'package:lms/data/model/trainer_course_meterial_list_model/trainer_course_meterial_list_model.dart';
 import 'package:lms/data/model/trainer_resource_upload_model/trainer_resource_upload_model.dart';
+import 'package:lms/data/model/trainer_webinar_recordings_model/trainer_webinar_recordings_model.dart';
 
 abstract class TrainerCourseRepository {
   Future<Either<Failure, TrainerCourseDetailModel>> getCourseDetail(
@@ -20,6 +21,9 @@ abstract class TrainerCourseRepository {
   );
 
   Future<Either<Failure, Success>> deleteResource(String? resourceId);
+
+  Future<Either<Failure, TrainerWebinarRecordingsModel>>
+  getTrainerWebunarRecordings(String? courseId);
 
   Future<Either<Failure, TrainerAllWebinarParticipentsModel>>
   getAllParticipants(String? courseId, String? Search);

@@ -8,6 +8,7 @@ import 'package:lms/data/model/trainer_all_webinar_participents_model/trainer_al
 import 'package:lms/data/model/trainer_course_detail_page/trainer_course_detail_page.dart';
 import 'package:lms/data/model/trainer_course_meterial_list_model/trainer_course_meterial_list_model.dart';
 import 'package:lms/data/model/trainer_resource_upload_model/trainer_resource_upload_model.dart';
+import 'package:lms/data/model/trainer_webinar_recordings_model/trainer_webinar_recordings_model.dart';
 import 'package:lms/data/network/api_client.dart';
 import 'package:lms/domain/repository/trainer_repo/trainer_course_repository.dart';
 
@@ -167,6 +168,30 @@ class TrainerCourseImplimentation implements TrainerCourseRepository {
           final trainerAllWebinarParticipentsData =
               TrainerAllWebinarParticipentsModel.fromJson(data);
           return Right(trainerAllWebinarParticipentsData);
+        },
+      );
+    } catch (e) {
+      return Left(AuthFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, TrainerWebinarRecordingsModel>>
+  getTrainerWebunarRecordings(String? courseId) async {
+    try {
+      final response = await apiClient.get(
+        "${ApiEndPoint.baseUrl}${ApiEndPoint.trainerWebinarRecordingsEndPoint}/${courseId}",
+      );
+      log('API get response list of recordings Trainer: $response');
+      return response.fold(
+        (failure) {
+          print("failure inside repoimpli: ${failure.message}");
+          return Left(failure);
+        },
+        (data) async {
+          final trainerWebinarRecordingsModel =
+              TrainerWebinarRecordingsModel.fromJson(data);
+          return Right(trainerWebinarRecordingsModel);
         },
       );
     } catch (e) {

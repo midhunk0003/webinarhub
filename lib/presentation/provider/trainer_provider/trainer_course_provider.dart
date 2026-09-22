@@ -2,8 +2,9 @@ import 'dart:developer';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:background_downloader/background_downloader.dart';
+// import 'package:background_downloader/background_downloader.dart';
 import 'package:lms/data/model/trainer_all_webinar_participents_model/trainer_all_webinar_participents_model.dart';
+import 'package:lms/data/model/trainer_webinar_recordings_model/trainer_webinar_recordings_model.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:lms/core/failure.dart';
@@ -34,6 +35,8 @@ class TrainerCourseProvider extends ChangeNotifier {
 
   bool _isLoadingListOfParticipents = false;
 
+  bool _isLoadingListOfRecordings = false;
+
   int? _deletingIndex;
 
   Failure? _failure;
@@ -46,6 +49,8 @@ class TrainerCourseProvider extends ChangeNotifier {
 
   TrainerAllWebinarParticipentsModel? _trainerAllWebinarParticipentsModel;
 
+  TrainerWebinarRecordingsModel? _trainerWebinarRecordingsModel;
+
   // ============================================================
   // DOWNLOAD STATES
   // ============================================================
@@ -57,7 +62,7 @@ class TrainerCourseProvider extends ChangeNotifier {
   double _downloadProgress = 0.0;
 
   /// Current download status.
-  TaskStatus? _downloadStatus;
+  // TaskStatus? _downloadStatus;
 
   PlatformFile? _selectedFile;
 
@@ -73,6 +78,8 @@ class TrainerCourseProvider extends ChangeNotifier {
 
   bool get isLoadingListOfParticipents => _isLoadingListOfParticipents;
 
+  bool get isLoadingListOfRecordings => _isLoadingListOfRecordings;
+
   int? get deletingIndex => _deletingIndex;
 
   Failure? get failure => _failure;
@@ -83,8 +90,12 @@ class TrainerCourseProvider extends ChangeNotifier {
 
   TrainerCourseMeterialListModel? get trainerCourseMeterialListModel =>
       _trainerCourseMeterialListModel;
+
   TrainerAllWebinarParticipentsModel? get trainerAllWebinarParticipentsModel =>
       _trainerAllWebinarParticipentsModel;
+
+  TrainerWebinarRecordingsModel? get trainerWebinarRecordingsModel =>
+      _trainerWebinarRecordingsModel;
 
   // ============================================================
   // DOWNLOAD GETTERS
@@ -94,7 +105,7 @@ class TrainerCourseProvider extends ChangeNotifier {
 
   double get downloadProgress => _downloadProgress;
 
-  TaskStatus? get downloadStatus => _downloadStatus;
+  // TaskStatus? get downloadStatus => _downloadStatus;
 
   bool get isDownloading => _downloadingFileName != null;
 
@@ -172,6 +183,36 @@ class TrainerCourseProvider extends ChangeNotifier {
       (success) {
         _trainerCourseMeterialListModel = success;
         _isLoadingListOfresource = false;
+
+        notifyListeners();
+      },
+    );
+  }
+
+  // ============================================================
+  // RECORDINGS LIST
+  // ============================================================
+  Future<void> getRecordingsListPro(String? courseId) async {
+    _isLoadingListOfRecordings = true;
+    _failure = null;
+    _success = null;
+
+    notifyListeners();
+
+    final result = await trainerCourseRepository.getTrainerWebunarRecordings(
+      courseId,
+    );
+
+    result.fold(
+      (failure) {
+        _failure = failure;
+        _isLoadingListOfRecordings = false;
+
+        notifyListeners();
+      },
+      (success) {
+        _trainerWebinarRecordingsModel = success;
+        _isLoadingListOfRecordings = false;
 
         notifyListeners();
       },
@@ -298,85 +339,85 @@ class TrainerCourseProvider extends ChangeNotifier {
   // ============================================================
   // DOWNLOAD RESOURCE
   // ============================================================
-  Future<DownloadResult> downloadResource({
-    required String url,
-    required String fileName,
-    String? token,
-  }) async {
-    // Prevent multiple simultaneous downloads.
-    if (isDownloading) {
-      print(
-        'Another file is already downloading: '
-        '$_downloadingFileName',
-      );
+  // Future<DownloadResult> downloadResource({
+  //   required String url,
+  //   required String fileName,
+  //   String? token,
+  // }) async {
+  //   // Prevent multiple simultaneous downloads.
+  //   if (isDownloading) {
+  //     print(
+  //       'Another file is already downloading: '
+  //       '$_downloadingFileName',
+  //     );
 
-      return DownloadResult.alreadyDownloading;
-    }
+  //     return DownloadResult.alreadyDownloading;
+  //   }
 
-    _downloadingFileName = fileName;
-    _downloadProgress = 0.0;
-    _downloadStatus = TaskStatus.enqueued;
+  //   _downloadingFileName = fileName;
+  //   _downloadProgress = 0.0;
+  //   _downloadStatus = TaskStatus.enqueued;
 
-    notifyListeners();
+  //   notifyListeners();
 
-    try {
-      final path = await FileDownloadService.downloadFile(
-        url: url,
-        fileName: fileName,
-        token: token,
+  //   try {
+  //     final path = await FileDownloadService.downloadFile(
+  //       url: url,
+  //       fileName: fileName,
+  //       token: token,
 
-        // Progress
-        onProgress: (progress) {
-          _downloadProgress = progress;
-          notifyListeners();
-        },
+  //       // Progress
+  //       onProgress: (progress) {
+  //         _downloadProgress = progress;
+  //         notifyListeners();
+  //       },
 
-        // Status
-        onStatus: (status) {
-          _downloadStatus = status;
-          notifyListeners();
-        },
-      );
+  //       // Status
+  //       onStatus: (status) {
+  //         _downloadStatus = status;
+  //         notifyListeners();
+  //       },
+  //     );
 
-      if (path != null) {
-        print('Resource downloaded successfully');
-        print('Path: $path');
+  //     if (path != null) {
+  //       print('Resource downloaded successfully');
+  //       print('Path: $path');
 
-        _downloadProgress = 1.0;
-        _downloadStatus = TaskStatus.complete;
+  //       _downloadProgress = 1.0;
+  //       _downloadStatus = TaskStatus.complete;
 
-        notifyListeners();
+  //       notifyListeners();
 
-        // Let UI show 100%.
-        await Future.delayed(const Duration(milliseconds: 500));
+  //       // Let UI show 100%.
+  //       await Future.delayed(const Duration(milliseconds: 500));
 
-        return DownloadResult.success;
-      }
+  //       return DownloadResult.success;
+  //     }
 
-      print('Resource download failed');
+  //     print('Resource download failed');
 
-      _downloadStatus = TaskStatus.failed;
+  //     _downloadStatus = TaskStatus.failed;
 
-      notifyListeners();
+  //     notifyListeners();
 
-      return DownloadResult.failed;
-    } catch (e) {
-      print('Download error: $e');
+  //     return DownloadResult.failed;
+  //   } catch (e) {
+  //     print('Download error: $e');
 
-      _downloadStatus = TaskStatus.failed;
+  //     _downloadStatus = TaskStatus.failed;
 
-      notifyListeners();
+  //     notifyListeners();
 
-      return DownloadResult.failed;
-    } finally {
-      // Clear download state.
-      _downloadingFileName = null;
-      _downloadProgress = 0.0;
-      _downloadStatus = null;
+  //     return DownloadResult.failed;
+  //   } finally {
+  //     // Clear download state.
+  //     _downloadingFileName = null;
+  //     _downloadProgress = 0.0;
+  //     _downloadStatus = null;
 
-      notifyListeners();
-    }
-  }
+  //     notifyListeners();
+  //   }
+  // }
 
   // ============================================================
   // Participants LIST

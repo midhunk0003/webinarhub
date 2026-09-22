@@ -61,10 +61,18 @@ JoinData _$JoinDataFromJson(Map<String, dynamic> json) => JoinData(
   meetingUrl: stringFromJson(json['meetingUrl']),
   meetingId: stringFromJson(json['meetingId']),
   meetingPassword: stringFromJson(json['meetingPassword']),
+  userName: stringFromJson(json['userName']),
+  userEmail: stringFromJson(json['userEmail']),
+  sdkJwt: stringFromJson(json['sdkJwt']),
+  registrantToken: stringFromJson(json['registrantToken']),
 );
 
 Map<String, dynamic> _$JoinDataToJson(JoinData instance) => <String, dynamic>{
   'meetingUrl': instance.meetingUrl,
   'meetingId': instance.meetingId,
   'meetingPassword': instance.meetingPassword,
+  'userName': instance.userName,
+  'userEmail': instance.userEmail,
+  'sdkJwt': instance.sdkJwt,
+  'registrantToken': instance.registrantToken,
 };

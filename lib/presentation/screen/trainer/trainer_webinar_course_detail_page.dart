@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:lms/core/api_end_point.dart';
 import 'package:lms/core/colors.dart';
 import 'package:lms/core/failure.dart';
+import 'package:lms/core/services/generateZoomJwt.dart';
+import 'package:lms/core/services/zoom_meating_data.dart';
+import 'package:lms/presentation/provider/payment_provider.dart';
 import 'package:lms/presentation/provider/permission_provider.dart';
 import 'package:lms/presentation/provider/trainer_provider/trainer_course_provider.dart';
+import 'package:lms/presentation/screen/google_drive_video_player.dart';
 import 'package:lms/presentation/screen/trainer/resource_view_screen.dart';
 import 'package:lms/presentation/screen/trainer/widget/course_detail_shimmer.dart';
 import 'package:lms/presentation/screen/user/my_course_screen/widget/languageandther_widget.dart';
@@ -29,6 +35,8 @@ class TrainerWebinarCourseDetailPage extends StatefulWidget {
 
 class _TrainerWebinarCourseDetailPageState
     extends State<TrainerWebinarCourseDetailPage> {
+  static const platform = MethodChannel('lms.video.player');
+  static const zoomPlatform = MethodChannel('lms.zoom');
   bool _isDialogShowing = false;
   @override
   void initState() {
@@ -44,9 +52,11 @@ class _TrainerWebinarCourseDetailPageState
     if (!mounted) return;
     final courseDetailProvider = context.read<TrainerCourseProvider>();
     final permissionProvider = context.read<PermissionProvider>();
+
     await Future.wait([
       courseDetailProvider.getCourseDetailPro(widget.courseId ?? ''),
       courseDetailProvider.getCourseResourceListPro(widget.courseId ?? ''),
+      courseDetailProvider.getRecordingsListPro(widget.courseId ?? ''),
       permissionProvider.getPermissionPro(),
     ]);
     if (!mounted) return;
@@ -96,7 +106,8 @@ class _TrainerWebinarCourseDetailPageState
     return Reusablebackground(
       child: Consumer2<TrainerCourseProvider, PermissionProvider>(
         builder: (context, trainerCourseProvider, permissionProvider, _) {
-          final failure = trainerCourseProvider.failure;
+          final failure =
+              trainerCourseProvider.failure ?? permissionProvider.failure;
           if (failure is NetworkFailure) {
             return NetWorkRetry(
               failureMessage:
@@ -112,6 +123,11 @@ class _TrainerWebinarCourseDetailPageState
           // Get data safely
           final resources =
               trainerCourseProvider.trainerCourseMeterialListModel?.data;
+
+          // recordings
+          final recordings =
+              trainerCourseProvider.trainerWebinarRecordingsModel?.data;
+
           return LayoutBuilder(
             builder: (context, constraints) {
               final bool isTablet = constraints.maxWidth > 600;
@@ -177,7 +193,7 @@ class _TrainerWebinarCourseDetailPageState
                                           color: Colors.grey.shade500,
                                         )
                                         : Image.network(
-                                          course.thumbnailUrl!,
+                                          '${ApiEndPoint.serverUrl}${course.thumbnailUrl!}',
                                           width: double.infinity,
                                           height: double.infinity,
                                           fit: BoxFit.cover,
@@ -236,7 +252,7 @@ class _TrainerWebinarCourseDetailPageState
                                         context: context,
                                         title: "Permission Required",
                                         message:
-                                            "You don't have permission to View materials. Please contact your administrator.",
+                                            "You don't have permission to View Students. Please contact your administrator.",
                                       );
                                     }
                                     return;
@@ -582,19 +598,22 @@ class _TrainerWebinarCourseDetailPageState
                                                   message:
                                                       provider.success!.message,
                                                   provider: provider,
-                                                  onTap: () {
-                                                    // provider.clearFailure();
+                                                  onTap: () async {
+                                                    provider.clearSuccess();
                                                     Navigator.pop(context);
+                                                    // Refresh resource list after successful upload
+                                                    await provider
+                                                        .getCourseResourceListPro(
+                                                          course.id.toString(),
+                                                        );
+                                                    // getCourseResourceListPro clears success,
+                                                    // so set it again after refreshing.
+                                                    provider.clearFailure();
+                                                    print(
+                                                      'Resource deleted successfully',
+                                                    );
                                                   },
                                                 );
-                                                // Refresh resource list after successful upload
-                                                await provider
-                                                    .getCourseResourceListPro(
-                                                      course.id.toString(),
-                                                    );
-                                                // getCourseResourceListPro clears success,
-                                                // so set it again after refreshing.
-                                                provider.clearFailure();
                                               }
                                             },
                                           );
@@ -831,15 +850,307 @@ class _TrainerWebinarCourseDetailPageState
                                   ),
                                 ],
                               ),
+
+                              const SizedBox(height: 24),
+                              // ================= UPLOAD CONTENT =================
+                              Text(
+                                'Recordings',
+                                style: TextStyle(
+                                  color: AppColor.ghostwhite,
+                                  fontSize: isTablet ? 22 : 20,
+                                  fontFamily: 'Urbanist',
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+
+                              const SizedBox(height: 14),
+
+                              (trainerCourseProvider
+                                          .isLoadingListOfRecordings ||
+                                      recordings == null)
+                                  ? webinarRecordingsShimmer()
+                                  : (recordings.isEmpty)
+                                  ? SizedBox.shrink()
+                                  : GridView.builder(
+                                    shrinkWrap: true,
+                                    physics:
+                                        const NeverScrollableScrollPhysics(),
+                                    padding: const EdgeInsets.all(0),
+                                    gridDelegate:
+                                        const SliverGridDelegateWithFixedCrossAxisCount(
+                                          crossAxisCount: 2,
+                                          crossAxisSpacing: 12,
+                                          mainAxisSpacing: 12,
+                                          childAspectRatio: 0.85,
+                                        ),
+                                    itemCount:
+                                        trainerCourseProvider
+                                            .trainerWebinarRecordingsModel
+                                            ?.data
+                                            ?.length ??
+                                        0,
+                                    itemBuilder: (context, index) {
+                                      final recording =
+                                          trainerCourseProvider
+                                              .trainerWebinarRecordingsModel
+                                              ?.data?[index];
+
+                                      return GestureDetector(
+                                        onTap: () async {
+                                          // Play recording here
+                                          if (!permissionProvider
+                                              .canViewWebinarRecordings) {
+                                            AppDialogHelper.showPermissionDeniedDialog(
+                                              context: context,
+                                              title: "Permission Required",
+                                              message:
+                                                  "You don't have permission to View materials. Please contact your administrator.",
+                                            );
+
+                                            return;
+                                          }
+                                          final videoUrl =
+                                              recording?.recordingUrl?.trim() ??
+                                              '';
+                                          print('video url  : ${videoUrl}');
+                                          if (videoUrl.isEmpty) {
+                                            ScaffoldMessenger.of(
+                                              context,
+                                            ).showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                  'Video URL is missing',
+                                                ),
+                                              ),
+                                            );
+
+                                            return;
+                                          }
+
+                                          // Navigator.push(
+                                          //   context,
+                                          //   MaterialPageRoute(
+                                          //     builder:
+                                          //         (_) => GoogleDriveVideoPlayer(
+                                          //           videoUrl: videoUrl,
+                                          //           title:
+                                          //               recording?.title ??
+                                          //               'Recording',
+                                          //         ),
+                                          //   ),
+                                          // );
+                                          await openNativePlayer(
+                                            videoUrl:
+                                                recording?.recordingUrl ?? '',
+                                            title:
+                                                "Trading Forex Exchange Updated",
+                                          );
+                                          // Navigator.push(
+                                          //   context,
+                                          //   MaterialPageRoute(
+                                          //     builder:
+                                          //         (_) => YoutubePlayerScreen(
+                                          //           videoId:
+                                          //               recording
+                                          //                   ?.recordingUrl ??
+                                          //               '',
+                                          //           title:
+                                          //               recording?.title ?? '',
+                                          //         ),
+                                          //   ),
+                                          // );
+                                        },
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              colors: [
+                                                AppColor.formPrimaryColor
+                                                    .withOpacity(0.24),
+                                                AppColor.formSecondaryColor
+                                                    .withOpacity(0.24),
+                                              ],
+                                            ),
+                                            border: Border.all(
+                                              color: AppColor.formBorderColor
+                                                  .withOpacity(0.24),
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black.withOpacity(
+                                                  0.4,
+                                                ),
+                                                offset: const Offset(0, 2),
+                                                blurRadius: 4,
+                                              ),
+                                            ],
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              // Video / Play area
+                                              Expanded(
+                                                child: Container(
+                                                  width: double.infinity,
+                                                  decoration: BoxDecoration(
+                                                    color: AppColor.goldDark,
+                                                    borderRadius:
+                                                        const BorderRadius.vertical(
+                                                          top: Radius.circular(
+                                                            12,
+                                                          ),
+                                                        ),
+                                                  ),
+                                                  child: const Center(
+                                                    child: CircleAvatar(
+                                                      radius: 28,
+                                                      child: Icon(
+                                                        Icons.play_arrow,
+                                                        size: 32,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+
+                                              // Title
+                                              Padding(
+                                                padding: const EdgeInsets.all(
+                                                  12,
+                                                ),
+                                                child: Text(
+                                                  recording?.title ?? 'Forex',
+                                                  maxLines: 2,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: const TextStyle(
+                                                    color:
+                                                        AppColor.glassHighlight,
+                                                    fontSize: 15,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
                               const SizedBox(height: 36),
+
                               // Join button
+                              // CommonCustomeButtonWidget(
+                              //   isTablet: isTablet,
+                              //   text: "Join To Train",
+                              //   onTap: () async {
+                              //     await trainerCourseProvider.launchZoomMeeting(
+                              //       course.meetingLink ?? '',
+                              //     );
+                              //   },
+                              // ),
                               CommonCustomeButtonWidget(
                                 isTablet: isTablet,
                                 text: "Join To Train",
                                 onTap: () async {
-                                  await trainerCourseProvider.launchZoomMeeting(
-                                    course.meetingLink ?? '',
+                                  // =====================================================
+                                  // YOUR ZOOM URL
+                                  // =====================================================
+
+                                  const zoomUrl =
+                                      "https://app.zoom.us/wc/81150519342/start?fromPWA=1&pwd=fnYCVNOw1pF5WRdU3uQWDRX69ZBo5x.1";
+
+                                  final zoomData = parseZoomUrl(zoomUrl);
+
+                                  // =====================================================
+                                  // VALIDATE MEETING ID
+                                  // =====================================================
+
+                                  if (zoomData.meetingNumber.isEmpty) {
+                                    debugPrint("Zoom Meeting ID not found");
+                                    return;
+                                  }
+
+                                  // =====================================================
+                                  // USER NAME
+                                  // =====================================================
+
+                                  const userName = "Test Student";
+
+                                  // =====================================================
+                                  // GENERATE ZOOM MEETING SDK JWT
+                                  // =====================================================
+
+                                  final jwt = generateZoomJwt(
+                                    clientId: "0qw_HEqbTJSsU1wSbPThw",
+                                    clientSecret:
+                                        "Fh1lhH5qMVbFHHOrFACJMf3CrcRRGtEu",
+                                    meetingNumber: ' ${zoomData.meetingNumber}',
                                   );
+
+                                  debugPrint(
+                                    "Zoom Meeting ID: ${zoomData.meetingNumber}",
+                                  );
+
+                                  debugPrint(
+                                    "Zoom Password: ${zoomData.password}",
+                                  );
+
+                                  debugPrint("jwt print: $jwt");
+
+                                  // =====================================================
+                                  // SEND TO ANDROID
+                                  // =====================================================
+
+                                  try {
+                                    final bool? result = await zoomPlatform
+                                        .invokeMethod<bool>("joinZoomMeeting", {
+                                          "meetingNumber":
+                                              zoomData.meetingNumber,
+                                          "meetingPassword": zoomData.password,
+                                          "userName": userName,
+                                          "jwt": jwt,
+                                        });
+
+                                    if (!mounted) {
+                                      return;
+                                    }
+
+                                    debugPrint(
+                                      "Zoom finished. Result = $result",
+                                    );
+
+                                    // Refresh the Detail Page after returning from Zoom.
+                                    await _initialData();
+
+                                    if (!mounted) {
+                                      return;
+                                    }
+
+                                    setState(() {});
+                                  } on PlatformException catch (e) {
+                                    debugPrint(
+                                      "Zoom error: ${e.code} - ${e.message}",
+                                    );
+
+                                    if (!mounted) {
+                                      return;
+                                    }
+
+                                    // Stay on the existing Detail Page.
+                                    // Optionally show an error message.
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          e.message ??
+                                              "Unable to join Zoom meeting",
+                                        ),
+                                      ),
+                                    );
+                                  }
                                 },
                               ),
 
@@ -853,6 +1164,41 @@ class _TrainerWebinarCourseDetailPageState
         },
       ),
     );
+  }
+
+  Future<void> openNativePlayer({
+    required String videoUrl,
+    required String title,
+  }) async {
+    try {
+      final convertedUrl = convertGoogleDriveUrl(videoUrl);
+
+      debugPrint('Original URL: $videoUrl');
+      debugPrint('Converted URL: $convertedUrl');
+
+      await platform.invokeMethod('openVideoPlayer', {
+        "videoUrl": convertedUrl,
+        "title": title,
+        "lastPosition": 0,
+      });
+    } on PlatformException catch (e) {
+      debugPrint("Error: ${e.message}");
+    }
+  }
+
+  String convertGoogleDriveUrl(String url) {
+    final regex = RegExp(r'drive\.google\.com/file/d/([^/]+)');
+
+    final match = regex.firstMatch(url);
+
+    if (match != null) {
+      final fileId = match.group(1);
+
+      return 'https://drive.google.com/uc?export=download&id=$fileId';
+    }
+
+    // Already converted / normal video URL
+    return url;
   }
 }
 
@@ -1041,7 +1387,7 @@ class _ResourceWidget extends StatelessWidget {
 
                     LinearProgressIndicator(
                       value: downloadProgress,
-                      color: AppColor.primaryBlueDark,
+                      color: AppColor.goldDark,
                       minHeight: 4,
                       borderRadius: BorderRadius.circular(10),
                     ),
@@ -1071,7 +1417,7 @@ class _ResourceWidget extends StatelessWidget {
                 width: isTablet ? 30 : 26,
                 height: isTablet ? 30 : 26,
                 child: CircularProgressIndicator(
-                  color: AppColor.primaryBlueDark,
+                  color: AppColor.goldDark,
                   value: downloadProgress == 0 ? null : downloadProgress,
                   strokeWidth: 2.5,
                 ),
@@ -1347,4 +1693,75 @@ IconData getFileIcon(String? extension) {
     default:
       return Icons.insert_drive_file_outlined;
   }
+}
+
+Widget webinarRecordingsShimmer() {
+  return GridView.builder(
+    shrinkWrap: true,
+    physics: const NeverScrollableScrollPhysics(),
+    padding: EdgeInsets.zero,
+    itemCount: 6,
+    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+      crossAxisCount: 2,
+      crossAxisSpacing: 12,
+      mainAxisSpacing: 12,
+      childAspectRatio: 0.85,
+    ),
+    itemBuilder: (context, index) {
+      return Shimmer.fromColors(
+        baseColor: Colors.grey.shade300,
+        highlightColor: Colors.grey.shade100,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Image / video placeholder
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+
+              // Title placeholder
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      height: 14,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      height: 14,
+                      width: 100,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
 }

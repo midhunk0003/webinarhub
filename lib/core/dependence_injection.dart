@@ -2,6 +2,7 @@ import 'package:get_it/get_it.dart';
 import 'package:http/http.dart' as http;
 import 'package:lms/data/local_data_source/local_data_sourse.dart';
 import 'package:lms/data/repository_implimentation/auth_repo_implimentation.dart';
+import 'package:lms/data/repository_implimentation/payment_repo_implimentation.dart';
 import 'package:lms/data/repository_implimentation/permission_repo_implimentation.dart';
 import 'package:lms/data/repository_implimentation/profile_repo_implimenttation.dart';
 import 'package:lms/data/repository_implimentation/trainer_repo_impli/trainer_all_webinar_implomentation.dart';
@@ -10,6 +11,7 @@ import 'package:lms/data/repository_implimentation/trainer_repo_impli/trainer_da
 import 'package:lms/data/repository_implimentation/user_repo_impli/user_all_webinar_implimentation.dart';
 import 'package:lms/data/repository_implimentation/user_repo_impli/user_course_implimentation.dart';
 import 'package:lms/data/repository_implimentation/user_repo_impli/user_dashboard_implimentation.dart';
+import 'package:lms/domain/repository/payment_repository.dart';
 import 'package:lms/domain/repository/permission_repository.dart';
 import 'package:lms/domain/repository/profile_repository.dart';
 import 'package:lms/domain/repository/trainer_repo/trainer_course_repository.dart';
@@ -19,6 +21,7 @@ import 'package:lms/domain/repository/user_repo/user_course_repository.dart';
 import 'package:lms/domain/repository/user_repo/user_dashboard_repository.dart';
 import 'package:lms/domain/repository/user_repo/user_webinar_repository.dart';
 import 'package:lms/firebasemessagingservice.dart';
+import 'package:lms/presentation/provider/payment_provider.dart';
 import 'package:lms/presentation/provider/permission_provider.dart';
 import 'package:lms/presentation/provider/trainer_provider/trainer_all_webinar_provider.dart';
 import 'package:lms/presentation/provider/trainer_provider/trainer_course_provider.dart';
@@ -123,7 +126,14 @@ Future<void> setupDependencyInjection() async {
     () => ProfileRepoImplimenttation(apiClient: getIt<ApiClient>()),
   );
 
+  // payment webinar repo
+  getIt.registerLazySingleton<PaymentRepository>(
+    () => PaymentRepoImplimentation(apiClient: getIt<ApiClient>()),
+  );
+
   /// ================= PROVIDER Register=================
+  ///
+  ///
   getIt.registerFactory<AuthProvider>(
     () => AuthProvider(
       authRepository: getIt<AuthRepository>(),
@@ -136,6 +146,7 @@ Future<void> setupDependencyInjection() async {
   getIt.registerFactory<TrainerDashboardProvider>(
     () => TrainerDashboardProvider(
       trainerDashboardRepository: getIt<TrainerDashboardRepository>(),
+      profileRepository: getIt<ProfileRepository>(),
     ),
   );
 
@@ -184,5 +195,10 @@ Future<void> setupDependencyInjection() async {
   // user course  webinar provider
   getIt.registerFactory<ProfileProvider>(
     () => ProfileProvider(profileRepository: getIt<ProfileRepository>()),
+  );
+
+  // user course  webinar provider
+  getIt.registerFactory<PaymentProvider>(
+    () => PaymentProvider(paymentRepository: getIt<PaymentRepository>()),
   );
 }

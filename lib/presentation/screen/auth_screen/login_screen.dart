@@ -139,31 +139,31 @@ class _LoginScreenState extends State<LoginScreen> {
                                 obscureText: authProvider.isObscureText,
                                 validator: (value) {
                                   if (value == null || value.trim().isEmpty) {
-                                    return "enter user password";
+                                    return "Enter User Password";
                                   }
                                   return null;
                                 },
                                 provider: authProvider,
                               ),
-                              SizedBox(height: _isTablet ? 14 : 12),
-                              Align(
-                                alignment:
-                                    Alignment.centerRight, // ✅ RIGHT ALIGN
-                                child: InkWell(
-                                  onTap: () {
-                                    debugPrint('forgot password');
-                                  },
-                                  child: Text(
-                                    'Forget password?',
-                                    style: TextStyle(
-                                      color: AppColor.lightgray,
-                                      fontSize: _isTablet ? 14 : 12,
-                                      fontFamily: 'Urbanist',
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              ),
+                              // SizedBox(height: _isTablet ? 14 : 12),
+                              // Align(
+                              //   alignment:
+                              //       Alignment.centerRight, // ✅ RIGHT ALIGN
+                              //   child: InkWell(
+                              //     onTap: () {
+                              //       debugPrint('forgot password');
+                              //     },
+                              //     child: Text(
+                              //       'Forget password?',
+                              //       style: TextStyle(
+                              //         color: AppColor.lightgray,
+                              //         fontSize: _isTablet ? 14 : 12,
+                              //         fontFamily: 'Urbanist',
+                              //         fontWeight: FontWeight.w500,
+                              //       ),
+                              //     ),
+                              //   ),
+                              // ),
                               SizedBox(height: _isTablet ? 40 : 36),
                               CommonCustomeButtonWidget(
                                 isTablet: _isTablet,
@@ -303,8 +303,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                         ),
                                       ),
                                       TextSpan(
-                                        text: 'Sign up',
-                                        style: TextStyle(color: Colors.blue),
+                                        text: 'Register',
+                                        style: TextStyle(color: AppColor.gold),
                                         recognizer:
                                             TapGestureRecognizer()
                                               ..onTap = () {
@@ -349,7 +349,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Center(
                     child: CircularProgressIndicator(
                       valueColor: AlwaysStoppedAnimation<Color>(
-                        AppColor.primaryBlueLight,
+                        AppColor.goldLight,
                       ),
                       strokeWidth: 3,
                     ),

@@ -37,6 +37,10 @@ class AuthLocalDataSource {
     await prefs.setString('userid', user?.userId ?? '');
     await prefs.setString('accessToken', data?.accessToken ?? '');
     await prefs.setString('refreshToken', data?.refreshToken ?? '');
+    await prefs.setString(
+      'requiresPolicyAcceptance',
+      data?.requiresPolicyAcceptance ?? '',
+    );
     await prefs.setString('userName', user?.username ?? '');
     await prefs.setString('fullName', user?.fullName ?? '');
     await prefs.setString('email', user?.email ?? '');

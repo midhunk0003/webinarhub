@@ -12,19 +12,19 @@ class OnboardScreen extends StatelessWidget {
 
   final List<Map<String, String>> onboardData = [
     {
-      "image": "assets/svg/onboard_one.svg",
+      "image": "assets/images/onb_gold_one.png",
       "title": "Discover Your Next Passion",
       "desc":
           "Dive into a world of knowledge. Explore thousands of courses across diverse subjects, from cutting-edge tech to creative arts. Your journey to new skills starts here.",
     },
     {
-      "image": "assets/svg/onboard_two.svg",
+      "image": "assets/images/onb_gold_two.png",
       "title": "Learn Live from Experts",
       "desc":
           "Dive into a world of knowledge. Explore thousands of courses across diverse subjects, from cutting-edge tech to creative arts. Your journey to new skills starts here.",
     },
     {
-      "image": "assets/svg/onboard_three.svg",
+      "image": "assets/images/onb_gold_three.png",
       "title": "Your Learning, Your Way",
       "desc":
           "Dive into a world of knowledge. Explore thousands of courses across diverse subjects, from cutting-edge tech to creative arts. Your journey to new skills starts here.",
@@ -85,11 +85,23 @@ class OnboardScreen extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           /// IMAGE
-                          SvgPicture.asset(
+                          // SvgPicture.asset(
+                          //   data["image"] ?? '',
+                          //   height: isTablet ? 300 : 220,
+                          // ),
+                          Image.asset(
                             data["image"] ?? '',
                             height: isTablet ? 300 : 220,
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) {
+                              debugPrint('IMAGE ERROR: $error');
+                              return const Icon(
+                                Icons.broken_image,
+                                color: Colors.white,
+                                size: 80,
+                              );
+                            },
                           ),
-
                           SizedBox(height: isTablet ? 30 : 20),
 
                           /// TITLE
@@ -137,7 +149,7 @@ class OnboardScreen extends StatelessWidget {
                         gradient: LinearGradient(
                           begin: Alignment.centerLeft,
                           end: Alignment.centerRight,
-                          colors: AppColor.primaryBlueGradient,
+                          colors: AppColor.goldGradient,
                         ),
                       ),
                     ),
@@ -201,7 +213,7 @@ class OnboardScreen extends StatelessWidget {
                             gradient: LinearGradient(
                               begin: Alignment.centerLeft,
                               end: Alignment.centerRight,
-                              colors: AppColor.primaryBlueGradient,
+                              colors: AppColor.goldGradient,
                             ),
                           ),
                           child: Center(

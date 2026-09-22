@@ -32,6 +32,7 @@ class RatingAndStudentEnrollWidget extends StatelessWidget {
                 SvgPicture.asset(
                   'assets/svg/enrollstudent.svg',
                   width: isTablet ? 20 : 16,
+                  color: AppColor.gold,
                 ),
 
                 const SizedBox(width: 4),

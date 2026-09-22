@@ -4,6 +4,7 @@ import 'package:dartz/dartz.dart';
 import 'package:lms/core/api_end_point.dart';
 import 'package:lms/core/failure.dart';
 import 'package:lms/core/success.dart';
+import 'package:lms/data/model/get_notification_count_model/get_notification_count_model.dart';
 import 'package:lms/data/model/notification_model/notification_model.dart';
 import 'package:lms/data/model/trainer_full_list_webinar_model/trainer_full_list_webinar_model.dart';
 import 'package:lms/data/model/trainer_over_view_model/trainer_over_view_model.dart';
@@ -137,6 +138,34 @@ class TrainerAllWebinarImplomentation implements TrainerWebinarRepository {
     } catch (e) {
       log('Mark notification as read exception: $e');
       return Left(OtherFailureNon200(e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, GetNotificationCountModel>>
+  getNotificationCount() async {
+    try {
+      final response = await apiClient.get(
+        "${ApiEndPoint.baseUrl}${ApiEndPoint.unreadCountEndPoint}",
+      );
+
+      log('API get response notification count: $response');
+
+      return response.fold(
+        (failure) {
+          log('Failure inside notification count: ${failure.message}');
+
+          return Left(failure);
+        },
+        (data) {
+          final notificationCount = GetNotificationCountModel.fromJson(data);
+          return Right(notificationCount);
+        },
+      );
+    } catch (e) {
+      log('Exception in getAllNotification count: $e');
+
+      return Left(AuthFailure(e.toString()));
     }
   }
 }

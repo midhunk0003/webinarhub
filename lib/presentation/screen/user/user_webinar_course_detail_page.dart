@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:lms/core/api_end_point.dart';
 import 'package:lms/core/colors.dart';
 import 'package:lms/core/failure.dart';
+import 'package:lms/core/services/generateZoomJwt.dart';
+import 'package:lms/core/services/zoom_meating_data.dart';
 import 'package:lms/data/model/user_course_detail_model/user_course_detail_model.dart';
+import 'package:lms/presentation/provider/payment_provider.dart';
 import 'package:lms/presentation/provider/permission_provider.dart';
 import 'package:lms/presentation/provider/trainer_provider/trainer_course_provider.dart';
 import 'package:lms/presentation/provider/user_provider/user_course_provider.dart';
+import 'package:lms/presentation/screen/flutter_video_player.dart';
+import 'package:lms/presentation/screen/google_drive_video_player.dart';
+import 'package:lms/presentation/screen/razorpay_service.dart';
 import 'package:lms/presentation/screen/trainer/resource_view_screen.dart';
 import 'package:lms/presentation/screen/trainer/widget/course_detail_shimmer.dart';
 import 'package:lms/presentation/screen/user/my_course_screen/widget/languageandther_widget.dart';
@@ -17,8 +24,11 @@ import 'package:lms/presentation/widgets/common_custome_button_widget.dart';
 import 'package:lms/presentation/widgets/diloges/app_dialog_helper.dart';
 import 'package:lms/presentation/widgets/formatWebinarDate.dart';
 import 'package:lms/presentation/widgets/network_retry_widget.dart';
+import 'package:lms/presentation/widgets/payment_gateway_bottom_sheet_widget.dart';
 import 'package:lms/presentation/widgets/reusablebackground/reusablebackground.dart';
+import 'package:lottie/lottie.dart';
 import 'package:provider/provider.dart';
+import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:shimmer/shimmer.dart';
 
 class UserWebinarCourseDetailPage extends StatefulWidget {
@@ -34,14 +44,198 @@ class UserWebinarCourseDetailPage extends StatefulWidget {
 class _UserWebinarCourseDetailPageState
     extends State<UserWebinarCourseDetailPage> {
   static const platform = MethodChannel('lms.video.player');
+  static const zoomPlatform = MethodChannel('lms.zoom');
   bool _isDialogShowing = false;
+  late final RazorpayService _razorpayService;
   @override
   void initState() {
     // TODO: implement initState
     super.initState();
+    _razorpayService = RazorpayService();
+
+    _razorpayService.initialize(
+      onPaymentSuccess: _onPaymentSuccess,
+      onPaymentError: _onPaymentError,
+      onExternalWallet: _onExternalWallet,
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initialData();
     });
+  }
+
+  void _onPaymentSuccess(PaymentSuccessResponse response) async {
+    debugPrint('Payment ID......: ${response.paymentId}');
+    debugPrint('Order ID........: ${response.orderId}');
+    debugPrint('Signature........: ${response.signature}');
+
+    if (!mounted) return;
+
+    try {
+      final provider = context.read<UserCourseProvider>();
+
+      // TODO:
+      // Call your backend payment verification API here.
+      //
+      // await provider.verifyPaymentPro(
+      //   paymentId: response.paymentId ?? '',
+      //   orderId: response.orderId ?? '',
+      //   signature: response.signature ?? '',
+      // );
+
+      // Refresh course detail
+      await provider.getCourseDetailPro(widget.courseId ?? '');
+
+      if (!mounted) return;
+
+      // ScaffoldMessenger.of(context).showSnackBar(
+      //   const SnackBar(content: Text('Payment successful. Access updated.')),
+      // );
+      await _showPaymentSuccessDialog();
+    } catch (e) {
+      debugPrint('Payment processing error: $e');
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Payment successful, but access update failed.'),
+        ),
+      );
+    }
+  }
+
+  void _onPaymentError(PaymentFailureResponse response) {
+    debugPrint('Payment failed: ${response.code} - ${response.message}');
+
+    if (!mounted) return;
+    final String errorMessage = response.message?.trim() ?? '';
+    if (errorMessage.isEmpty ||
+        errorMessage.toLowerCase() == 'undefined' ||
+        errorMessage.toLowerCase() == 'null') {
+      _showPaymentError('Payment cancelled.');
+      return;
+    }
+
+    _showPaymentError(response.message ?? 'Payment failed. Please try again.');
+  }
+
+  void _onExternalWallet(ExternalWalletResponse response) {
+    debugPrint('External wallet: ${response.walletName}');
+  }
+
+  // payment error diloge
+  void _showPaymentError(String message) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          backgroundColor: const Color(0xFFDC2626),
+          elevation: 8,
+          duration: const Duration(seconds: 3),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          content: Row(
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                color: Colors.white,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  message,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+  }
+
+  Future<void> _showPaymentSuccessDialog() async {
+    if (!mounted) {
+      return;
+    }
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: AppColor.background,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  height: 150,
+                  width: 150,
+                  child: Lottie.asset(
+                    'assets/lottie/gopaysuccesfullpayment.json',
+                    repeat: false,
+                  ),
+                ),
+
+                const SizedBox(height: 10),
+
+                const Text(
+                  'Payment Successful!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: AppColor.ghostwhite,
+                  ),
+                ),
+
+                const SizedBox(height: 8),
+
+                Text(
+                  'Your payment was completed successfully.\n'
+                  'Your course access has been updated.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    height: 1.5,
+                    color: AppColor.glassHighlight,
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+                CommonCustomeButtonWidget(
+                  isTablet: false,
+                  text: "continue",
+                  onTap: () {
+                    _initialData();
+                    Navigator.pop(context);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _initialData() async {
@@ -49,25 +243,29 @@ class _UserWebinarCourseDetailPageState
     if (!mounted) return;
     final courseDetailProvider = context.read<UserCourseProvider>();
     final permissionProvider = context.read<PermissionProvider>();
+    final paymentProvider = context.read<PaymentProvider>();
     await Future.wait([
       courseDetailProvider.getCourseDetailPro(widget.courseId ?? ''),
       courseDetailProvider.getCourseResourceListPro(widget.courseId ?? ''),
       courseDetailProvider.getRecordingsListPro(widget.courseId ?? ''),
       permissionProvider.getPermissionPro(),
+      paymentProvider.getAvailablePaymentWayPro(),
     ]);
     if (!mounted) return;
-    _handleFailure(courseDetailProvider, permissionProvider);
+    _handleFailure(courseDetailProvider, permissionProvider, paymentProvider);
   }
 
   void _handleFailure(
     UserCourseProvider courseDetailProvider,
     PermissionProvider permissionProvider,
+    PaymentProvider paymentProvider,
   ) {
     if (_isDialogShowing) return;
 
     final failures = <Failure>[
       if (courseDetailProvider.failure != null) courseDetailProvider.failure!,
       if (permissionProvider.failure != null) permissionProvider.failure!,
+      if (paymentProvider.failure != null) paymentProvider.failure!,
     ];
 
     if (!mounted || failures.isEmpty) return;
@@ -88,6 +286,7 @@ class _UserWebinarCourseDetailPageState
       onTap: () {
         courseDetailProvider.clearFailure();
         permissionProvider.clearFailure();
+        paymentProvider.clearFailure();
         Navigator.pop(context);
       },
     );
@@ -100,9 +299,18 @@ class _UserWebinarCourseDetailPageState
   @override
   Widget build(BuildContext context) {
     return Reusablebackground(
-      child: Consumer2<UserCourseProvider, PermissionProvider>(
-        builder: (context, userCourseProvider, permissionProvider, _) {
-          final failure = userCourseProvider.failure;
+      child: Consumer3<UserCourseProvider, PermissionProvider, PaymentProvider>(
+        builder: (
+          context,
+          userCourseProvider,
+          permissionProvider,
+          paymentProvider,
+          _,
+        ) {
+          final failure =
+              userCourseProvider.failure ??
+              permissionProvider.failure ??
+              paymentProvider.failure;
           if (failure is NetworkFailure) {
             return NetWorkRetry(
               failureMessage:
@@ -115,6 +323,13 @@ class _UserWebinarCourseDetailPageState
           }
 
           final course = userCourseProvider.courseDetailModel?.data;
+
+          final currentUser = course?.currentUser;
+          final isEnrolled = currentUser?.isEnrolled?.toLowerCase() == 'true';
+          final canPay = currentUser?.canPay?.toLowerCase() == 'true';
+          final canJoin = currentUser?.canJoin?.toLowerCase() == 'true';
+          final paymentStatusName = currentUser?.paymentStatusName ?? '';
+          final enrollmentStatusName = currentUser?.enrollmentStatusName ?? '';
           // Get data safely
           final resources =
               userCourseProvider.userCourseMeterialListModel?.data;
@@ -122,6 +337,11 @@ class _UserWebinarCourseDetailPageState
           // recordings
           final recordings =
               userCourseProvider.userWebinarRecordingsModel?.data;
+
+          // get available gate ways
+          final paymentGateWays =
+              paymentProvider.availablePaymentGateWaysModel?.data;
+
           return LayoutBuilder(
             builder: (context, constraints) {
               final bool isTablet = constraints.maxWidth > 600;
@@ -186,7 +406,8 @@ class _UserWebinarCourseDetailPageState
                                           color: Colors.grey.shade500,
                                         )
                                         : Image.network(
-                                          course.thumbnailUrl!,
+                                          ApiEndPoint.serverUrl +
+                                              (course.thumbnailUrl ?? ''),
                                           width: double.infinity,
                                           height: double.infinity,
                                           fit: BoxFit.cover,
@@ -235,17 +456,15 @@ class _UserWebinarCourseDetailPageState
                               // Rating
                               RatingAndStudentEnrollWidget(
                                 isTablet: isTablet,
-                                stundEnrolled:
-                                    '${course?.enrolledParticipantCount ?? ''}',
+                                stundEnrolled: '',
                                 onTap: () {
                                   if (!permissionProvider.canViewParticipents) {
                                     AppDialogHelper.showPermissionDeniedDialog(
                                       context: context,
                                       title: "Permission Required",
                                       message:
-                                          "You don't have permission to View materials. Please contact your administrator.",
+                                          "You don't have permission to View Students. Please contact your administrator.",
                                     );
-
                                     return;
                                   }
                                   Navigator.pushNamed(
@@ -627,11 +846,18 @@ class _UserWebinarCourseDetailPageState
 
                               const SizedBox(height: 14),
 
-                              (userCourseProvider.isLoadingListOfRecordings ||
-                                      recordings == null)
+                              (userCourseProvider.isLoadingListOfRecordings)
                                   ? webinarRecordingsShimmer()
-                                  : (recordings.isEmpty)
-                                  ? SizedBox.shrink()
+                                  : (recordings == null || recordings.isEmpty)
+                                  ? Center(
+                                    child: Text(
+                                      'No recordings available',
+                                      style: TextStyle(
+                                        color: AppColor.ghostwhite,
+                                        fontFamily: 'Urbanist',
+                                      ),
+                                    ),
+                                  )
                                   : GridView.builder(
                                     shrinkWrap: true,
                                     physics:
@@ -670,23 +896,27 @@ class _UserWebinarCourseDetailPageState
 
                                             return;
                                           }
+                                          print(
+                                            'Recording URL: ${recording?.recordingUrl}',
+                                          );
+
                                           await openNativePlayer(
                                             videoUrl:
                                                 recording?.recordingUrl ?? '',
-                                            title:
-                                                "Trading Forex Exchange Updated",
+                                            title: recording?.title ?? '',
+                                            recordingType:
+                                                recording?.recordingType ??
+                                                'mp4',
                                           );
                                           // Navigator.push(
                                           //   context,
                                           //   MaterialPageRoute(
                                           //     builder:
-                                          //         (_) => YoutubePlayerScreen(
-                                          //           videoId:
-                                          //               recording
-                                          //                   ?.recordingUrl ??
-                                          //               '',
+                                          //         (_) => GoogleDriveVideoPlayer(
+                                          //           videoUrl:
+                                          //               'https://drive.google.com/file/d/1sv1b60ZXWgM3mMHkP23h0NyTQAYzFCbQ/view',
                                           //           title:
-                                          //               recording?.title ?? '',
+                                          //               '${recording?.title ?? 'Recording'}',
                                           //         ),
                                           //   ),
                                           // );
@@ -729,7 +959,7 @@ class _UserWebinarCourseDetailPageState
                                                   decoration: BoxDecoration(
                                                     color:
                                                         AppColor
-                                                            .primaryBlueDark,
+                                                            .formBorderColor,
                                                     borderRadius:
                                                         const BorderRadius.vertical(
                                                           top: Radius.circular(
@@ -775,13 +1005,53 @@ class _UserWebinarCourseDetailPageState
                                   ),
 
                               const SizedBox(height: 36),
+                              const SizedBox(height: 16),
+
+                              Text(
+                                'Available Time Slots',
+                                style: TextStyle(
+                                  color: AppColor.ghostwhite,
+                                  fontSize: isTablet ? 22 : 20,
+                                  fontFamily: 'Urbanist',
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+
+                              const SizedBox(height: 14),
+
+                              _TimeSlotContainer(
+                                isTablet: isTablet,
+                                time: '10:00 AM - 11:00 AM',
+                                slotCount: 5,
+                              ),
+
+                              const SizedBox(height: 10),
+
+                              _TimeSlotContainer(
+                                isTablet: isTablet,
+                                time: '11:00 AM - 12:00 PM',
+                                slotCount: 8,
+                              ),
+
+                              const SizedBox(height: 10),
+
+                              _TimeSlotContainer(
+                                isTablet: isTablet,
+                                time: '12:00 PM - 01:00 PM',
+                                slotCount: 3,
+                              ),
+                              const SizedBox(height: 36),
+
                               // Join button
                               CommonCustomeButtonWidget(
                                 isTablet: isTablet,
                                 text:
                                     userCourseProvider.isLoadingJoinData
-                                        ? 'Try to join....'
-                                        : "Join",
+                                        ? 'Please wait...'
+                                        : canPay
+                                        ? 'Pay Now'
+                                        : 'Join',
+
                                 onTap:
                                     userCourseProvider.isLoadingJoinData
                                         ? null
@@ -790,12 +1060,16 @@ class _UserWebinarCourseDetailPageState
                                             await userCourseProvider
                                                 .userJoinDataPro(
                                                   widget.courseId.toString(),
+                                                  '2',
                                                 );
-
+                                            print(
+                                              'Join Webinar Result: ${userCourseProvider.success}',
+                                            );
                                             if (!mounted) return;
 
-                                            if (userCourseProvider.success ==
-                                                true) {
+                                            if (userCourseProvider
+                                                    .userJoinWebinarModel !=
+                                                null) {
                                               final meetingUrl =
                                                   userCourseProvider
                                                       .userJoinWebinarModel
@@ -816,16 +1090,199 @@ class _UserWebinarCourseDetailPageState
                                                 return;
                                               }
 
-                                              await userCourseProvider
-                                                  .launchZoomMeeting(
-                                                    meetingUrl,
-                                                  );
+                                              // await userCourseProvider
+                                              //     .launchZoomMeeting(
+                                              //       meetingUrl,
+                                              //     );
+                                              // =====================================================
+                                              // YOUR ZOOM URL
+                                              // =====================================================
+
+                                              const zoomUrl =
+                                                  "https://app.zoom.us/wc/81150519342/start?fromPWA=1&pwd=fnYCVNOw1pF5WRdU3uQWDRX69ZBo5x.1";
+
+                                              final zoomData = parseZoomUrl(
+                                                zoomUrl,
+                                              );
+
+                                              // =====================================================
+                                              // VALIDATE MEETING ID
+                                              // =====================================================
+
+                                              if (zoomData
+                                                  .meetingNumber
+                                                  .isEmpty) {
+                                                debugPrint(
+                                                  "Zoom Meeting ID not found",
+                                                );
+                                                return;
+                                              }
+
+                                              // =====================================================
+                                              // USER NAME
+                                              // =====================================================
+
+                                              const userName = "Test Student";
+
+                                              // =====================================================
+                                              // GENERATE ZOOM MEETING SDK JWT
+                                              // =====================================================
+
+                                              // final jwt = generateZoomJwt(
+                                              //   clientId:
+                                              //       "0qw_HEqbTJSsU1wSbPThw",
+                                              //   clientSecret:
+                                              //       "Fh1lhH5qMVbFHHOrFACJMf3CrcRRGtEu",
+                                              //   meetingNumber:
+                                              //       '${zoomData.meetingNumber}',
+                                              // );
+
+                                              final jwt = generateZoomJwt(
+                                                clientId:
+                                                    "ThCVsAiWRSag9kEVQbzZiw",
+                                                clientSecret:
+                                                    "eE47oI40X2hU8vIjs8iY1hWvjaCF9Y39",
+                                                meetingNumber:
+                                                    '${zoomData.meetingNumber}',
+                                              );
+
+                                              debugPrint(
+                                                "Zoom Meeting ID: ${zoomData.meetingNumber}",
+                                              );
+
+                                              debugPrint(
+                                                "Zoom Password: ${zoomData.password}",
+                                              );
+
+                                              debugPrint("jwt print: $jwt");
+
+                                              // =====================================================
+                                              // SEND TO ANDROID
+                                              // =====================================================
+
+                                              try {
+                                                final bool?
+                                                result = await zoomPlatform
+                                                    .invokeMethod<bool>(
+                                                      "joinZoomMeeting",
+                                                      {
+                                                        "meetingNumber":
+                                                            zoomData
+                                                                .meetingNumber,
+                                                        "meetingPassword":
+                                                            zoomData.password,
+                                                        "userName": userName,
+                                                        "jwt": jwt,
+                                                      },
+                                                    );
+
+                                                if (!mounted) {
+                                                  return;
+                                                }
+
+                                                debugPrint(
+                                                  "Zoom finished. Result = $result",
+                                                );
+
+                                                // Refresh the Detail Page after returning from Zoom.
+                                                await _initialData();
+
+                                                if (!mounted) {
+                                                  return;
+                                                }
+
+                                                setState(() {});
+                                              } on PlatformException catch (e) {
+                                                debugPrint(
+                                                  "Zoom error: ${e.code} - ${e.message}",
+                                                );
+
+                                                if (!mounted) {
+                                                  return;
+                                                }
+
+                                                // Stay on the existing Detail Page.
+                                                // Optionally show an error message.
+                                                ScaffoldMessenger.of(
+                                                  context,
+                                                ).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                      e.message ??
+                                                          "Unable to join Zoom meeting",
+                                                    ),
+                                                  ),
+                                                );
+                                              }
                                             } else if (userCourseProvider
                                                     .failure !=
                                                 null) {
+                                              // IMPORTANT: // Here you need to identify whether the API failure // means "payment required".
+                                              // // // Replace this condition with your actual API // errorCode/status/message.
+                                              final failureMessage =
+                                                  userCourseProvider
+                                                      .failure
+                                                      ?.message
+                                                      .toString();
+                                              debugPrint(
+                                                'Join API Failure: $failureMessage',
+                                              );
+                                              if (canPay == true) {
+                                                if (failureMessage!
+                                                        .toLowerCase()
+                                                        .contains('Payment') ||
+                                                    failureMessage!
+                                                        .toLowerCase()
+                                                        .contains('pay') ||
+                                                    failureMessage!
+                                                        .toLowerCase()
+                                                        .contains('enroll')) {
+                                                  // inside this create order
+
+                                                  showPaymentGatewayBottomSheet(
+                                                    context: context,
+                                                    gateways:
+                                                        paymentGateWays ?? [],
+
+                                                    // IMPORTANT:
+                                                    // This should be the actual webinar ID,
+                                                    // not courseId unless they are the same in your API.
+                                                    webinarId:
+                                                        int.tryParse(
+                                                          widget.courseId
+                                                              .toString(),
+                                                        ) ??
+                                                        0,
+
+                                                    amount:
+                                                        double.tryParse(
+                                                          course.price
+                                                                  ?.toString() ??
+                                                              '0',
+                                                        ) ??
+                                                        0,
+
+                                                    name: '${course.title}',
+
+                                                    description:
+                                                        course.description ??
+                                                        'Webinar Registration',
+
+                                                    razorpayService:
+                                                        _razorpayService,
+
+                                                    paymentProvider:
+                                                        paymentProvider,
+                                                  );
+
+                                                  return;
+                                                }
+                                              }
+
                                               _handleFailure(
                                                 userCourseProvider,
                                                 permissionProvider,
+                                                paymentProvider,
                                               );
                                             } else {
                                               ScaffoldMessenger.of(
@@ -857,6 +1314,7 @@ class _UserWebinarCourseDetailPageState
                                           }
                                         },
                               ),
+
                               const SizedBox(height: 30),
                             ],
                           ),
@@ -869,24 +1327,110 @@ class _UserWebinarCourseDetailPageState
     );
   }
 
+  // Future<void> openNativePlayer({
+  //   required String videoUrl,
+  //   required String title,
+  // }) async {
+  //   try {
+  //     final convertedUrl = convertGoogleDriveUrl(
+  //       'https://drive.google.com/file/d/1RQ8j_FST3WQMxgcTkzoI3hcmTGPKc2CI/view?usp=sharing',
+  //     );
+
+  //     debugPrint('Original URL: $videoUrl');
+  //     debugPrint('Converted URL: $convertedUrl');
+
+  //     await platform.invokeMethod('openVideoPlayer', {
+  //       "videoUrl": convertedUrl,
+  //       "title": title,
+  //       "lastPosition": 0,
+  //     });
+  //   } on PlatformException catch (e) {
+  //     debugPrint("Error: ${e.message}");
+  //   }
+  // }
+
+  // String convertGoogleDriveUrl(String url) {
+  //   final regex = RegExp(r'drive\.google\.com/file/d/([^/]+)');
+
+  //   final match = regex.firstMatch(url);
+
+  //   if (match != null) {
+  //     final fileId = match.group(1);
+
+  //     return 'https://drive.google.com/uc?export=download&id=$fileId';
+  //   }
+
+  //   // Already converted / normal video URL
+  //   return url;
+  // }
+
   Future<void> openNativePlayer({
     required String videoUrl,
     required String title,
+    required String recordingType,
   }) async {
     try {
-      final convertedUrl = convertGoogleDriveUrl(videoUrl);
+      // final fileId = getGoogleDriveFileId(videoUrl);
+      // final convertedUrl = convertGoogleDriveUrl(videoUrl);
+      // final apiwithLinkFileId =
+      //     'https://www.googleapis.com/drive/v3/files/$fileId?alt=media&key=AIzaSyB0vVbijLWV_lhjzGNYncTFzRsd4sKfGwU';
+      // debugPrint('Original URL: $videoUrl');
+      // debugPrint('Converted URL: $convertedUrl');
 
-      debugPrint('Original URL: $videoUrl');
-      debugPrint('Converted URL: $convertedUrl');
+      // await platform.invokeMethod('openVideoPlayer', {
+      //   "videoUrl":
+      //       'https://vz-0b30dce4-9f9.b-cdn.net/b6625063-7c27-4a1a-94b1-89bc6d621c23/playlist.m3u8',
+      //   "title": title,
+      //   "lastPosition": 0,
+      // });
+      String finalVideoUrl;
+
+      if (recordingType == "1") {
+        // Google Drive
+        final fileId = getGoogleDriveFileId(videoUrl);
+
+        finalVideoUrl =
+            'https://www.googleapis.com/drive/v3/files/$fileId?alt=media&key=AIzaSyAEdvK8Faly6R804obbUWubrVzGYfNa_LY';
+
+        debugPrint('Recording Type: Drive');
+        debugPrint('Drive URL: $finalVideoUrl');
+      } else if (recordingType == "2") {
+        // Bunny Stream
+        finalVideoUrl = videoUrl;
+
+        debugPrint('Recording Type: Bunny');
+        debugPrint('Bunny URL: $finalVideoUrl');
+      } else {
+        debugPrint('Unknown recording type: $recordingType');
+        return;
+      }
 
       await platform.invokeMethod('openVideoPlayer', {
-        "videoUrl": convertedUrl,
+        "videoUrl": finalVideoUrl,
         "title": title,
         "lastPosition": 0,
       });
+      // Navigator.push(
+      //   context,
+      //   MaterialPageRoute(
+      //     builder: (_) => SimpleVideoPlayer(videoUrl: videoUrl),
+      //   ),
+      // );
     } on PlatformException catch (e) {
       debugPrint("Error: ${e.message}");
     }
+  }
+
+  String getGoogleDriveFileId(String url) {
+    final regex = RegExp(r'drive\.google\.com/file/d/([^/]+)');
+
+    final match = regex.firstMatch(url);
+
+    if (match != null) {
+      return match.group(1)!;
+    }
+
+    throw Exception('Invalid Google Drive URL');
   }
 
   String convertGoogleDriveUrl(String url) {
@@ -895,12 +1439,11 @@ class _UserWebinarCourseDetailPageState
     final match = regex.firstMatch(url);
 
     if (match != null) {
-      final fileId = match.group(1);
+      final fileId = match.group(1)!;
 
       return 'https://drive.google.com/uc?export=download&id=$fileId';
     }
 
-    // Already converted / normal video URL
     return url;
   }
 
@@ -1421,9 +1964,16 @@ class _WebinarInfoCard extends StatelessWidget {
       width: fullWidth ? double.infinity : null,
       padding: EdgeInsets.all(isTablet ? 18 : 14),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
+        color: AppColor.formPrimaryColor.withOpacity(0.06),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: AppColor.formBorderColor.withOpacity(0.24)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.4),
+            offset: const Offset(0, 2),
+            blurRadius: 4,
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -1581,7 +2131,7 @@ class _ResourceWidget extends StatelessWidget {
 
                     LinearProgressIndicator(
                       value: downloadProgress,
-                      color: AppColor.primaryBlueDark,
+                      color: AppColor.goldDark,
                       minHeight: 4,
                       borderRadius: BorderRadius.circular(10),
                     ),
@@ -1611,7 +2161,7 @@ class _ResourceWidget extends StatelessWidget {
                 width: isTablet ? 30 : 26,
                 height: isTablet ? 30 : 26,
                 child: CircularProgressIndicator(
-                  color: AppColor.primaryBlueDark,
+                  color: AppColor.goldDark,
                   value: downloadProgress == 0 ? null : downloadProgress,
                   strokeWidth: 2.5,
                 ),
@@ -1826,4 +2376,80 @@ Widget webinarRecordingsShimmer() {
       );
     },
   );
+}
+
+class _TimeSlotContainer extends StatelessWidget {
+  final bool isTablet;
+  final String time;
+  final int slotCount;
+
+  const _TimeSlotContainer({
+    required this.isTablet,
+    required this.time,
+    required this.slotCount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(
+        horizontal: isTablet ? 18 : 14,
+        vertical: isTablet ? 16 : 14,
+      ),
+      decoration: BoxDecoration(
+        color: AppColor.formPrimaryColor.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColor.formBorderColor.withOpacity(0.24)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: AppColor.formPrimaryColor.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              Icons.access_time_rounded,
+              color: AppColor.ghostwhite,
+              size: 21,
+            ),
+          ),
+
+          const SizedBox(width: 12),
+
+          Expanded(
+            child: Text(
+              time,
+              style: TextStyle(
+                color: AppColor.ghostwhite,
+                fontSize: isTablet ? 16 : 14,
+                fontFamily: 'Urbanist',
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              color: AppColor.formPrimaryColor.withOpacity(0.15),
+            ),
+            child: Text(
+              '$slotCount slots',
+              style: TextStyle(
+                color: AppColor.ghostwhite,
+                fontSize: isTablet ? 13 : 12,
+                fontFamily: 'Urbanist',
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

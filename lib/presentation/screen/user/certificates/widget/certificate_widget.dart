@@ -100,7 +100,7 @@ class CertificateWidget extends StatelessWidget {
                     child: Container(
                       decoration: BoxDecoration(
                         border: Border.all(
-                          color: AppColor.primaryBlueMid,
+                          color: AppColor.goldDark.withOpacity(0.5),
                           width: 1 * scale,
                         ),
                       ),
@@ -268,7 +268,7 @@ class CertificateWidget extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 26 * scale,
                         fontWeight: FontWeight.bold,
-                        color: AppColor.primaryBlueMid,
+                        color: AppColor.goldDark.withOpacity(0.5),
                       ),
                     ),
                   ),

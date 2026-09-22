@@ -3,6 +3,7 @@ import 'dart:developer';
 import 'package:dartz/dartz.dart';
 import 'package:lms/core/api_end_point.dart';
 import 'package:lms/core/failure.dart';
+import 'package:lms/core/success.dart';
 import 'package:lms/data/model/user_course_detail_model/user_course_detail_model.dart';
 import 'package:lms/data/model/user_course_material_list_model/user_course_meterial_list_model.dart';
 import 'package:lms/data/model/user_join_webinar_model/user_join_webinar_model.dart';
@@ -92,10 +93,12 @@ class UserCourseImplimentation implements UserCourseRepository {
   @override
   Future<Either<Failure, UserJoinWebinarModel>> getUserToJoinWebinar(
     String? courseId,
+    String? mobile,
   ) async {
     try {
       final response = await apiClient.post(
         "${ApiEndPoint.baseUrl}${ApiEndPoint.userJoinWebinarEndPoint}/${courseId}",
+        body: {'client': int.parse(mobile.toString())},
       );
       log('API get user join webinardetails: $response');
       return response.fold(

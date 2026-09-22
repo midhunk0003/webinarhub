@@ -65,6 +65,12 @@ UserDetailData _$UserDetailDataFromJson(Map<String, dynamic> json) =>
       recordingCount: stringFromJson(json['recordingCount']),
       createdAt: stringFromJson(json['createdAt']),
       updatedAt: stringFromJson(json['updatedAt']),
+      currentUser:
+          json['currentUser'] == null
+              ? null
+              : UserCurrentUser.fromJson(
+                json['currentUser'] as Map<String, dynamic>,
+              ),
     );
 
 Map<String, dynamic> _$UserDetailDataToJson(UserDetailData instance) =>
@@ -97,4 +103,27 @@ Map<String, dynamic> _$UserDetailDataToJson(UserDetailData instance) =>
       'recordingCount': instance.recordingCount,
       'createdAt': instance.createdAt,
       'updatedAt': instance.updatedAt,
+      'currentUser': instance.currentUser,
+    };
+
+UserCurrentUser _$UserCurrentUserFromJson(Map<String, dynamic> json) =>
+    UserCurrentUser(
+      isEnrolled: stringFromJson(json['isEnrolled']),
+      enrollmentStatus: stringFromJson(json['enrollmentStatus']),
+      enrollmentStatusName: stringFromJson(json['enrollmentStatusName']),
+      paymentStatus: stringFromJson(json['paymentStatus']),
+      paymentStatusName: stringFromJson(json['paymentStatusName']),
+      canPay: stringFromJson(json['canPay']),
+      canJoin: stringFromJson(json['canJoin']),
+    );
+
+Map<String, dynamic> _$UserCurrentUserToJson(UserCurrentUser instance) =>
+    <String, dynamic>{
+      'isEnrolled': instance.isEnrolled,
+      'enrollmentStatus': instance.enrollmentStatus,
+      'enrollmentStatusName': instance.enrollmentStatusName,
+      'paymentStatus': instance.paymentStatus,
+      'paymentStatusName': instance.paymentStatusName,
+      'canPay': instance.canPay,
+      'canJoin': instance.canJoin,
     };

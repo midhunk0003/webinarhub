@@ -131,7 +131,8 @@ class _MyCartScreenState extends State<MyCartScreen> {
                                       height: _isTablet ? 28 : 22,
                                       decoration: BoxDecoration(
                                         border: Border.all(
-                                          color: AppColor.primaryBlueLight,
+                                          color: AppColor.ghostwhite
+                                              .withOpacity(0.4),
                                           width: 2,
                                         ),
                                         borderRadius: BorderRadius.circular(3),
@@ -141,9 +142,7 @@ class _MyCartScreenState extends State<MyCartScreen> {
                                                 ? LinearGradient(
                                                   begin: Alignment.centerLeft,
                                                   end: Alignment.centerRight,
-                                                  colors:
-                                                      AppColor
-                                                          .primaryBlueGradient,
+                                                  colors: AppColor.goldGradient,
                                                 )
                                                 : null,
                                       ),
@@ -276,7 +275,7 @@ class _MyCartScreenState extends State<MyCartScreen> {
                             Text(
                               'Price details',
                               style: TextStyle(
-                                color: AppColor.blueGrey,
+                                color: AppColor.ghostwhite,
                                 fontSize: _isTablet ? 18 : 14,
                                 fontFamily: 'Urbanist',
                                 fontWeight: FontWeight.w400,

@@ -43,11 +43,15 @@ class Data {
 
   User? user;
 
+  @JsonKey(fromJson: stringFromJson)
+  String? requiresPolicyAcceptance;
+
   Data({
     this.accessToken,
     this.refreshToken,
     this.accessTokenExpiry,
     this.user,
+    this.requiresPolicyAcceptance,
   });
 
   factory Data.fromJson(Map<String, dynamic> json) => _$DataFromJson(json);

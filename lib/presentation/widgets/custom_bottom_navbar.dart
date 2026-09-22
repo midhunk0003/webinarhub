@@ -114,10 +114,9 @@ class _CustomBottomNavbarWidgetState extends State<CustomBottomNavbarWidget> {
             icon: 'assets/icons/home.svg',
           ),
           BottomNavItem(
-            page: Center(
-              child: Text('🏠 Home', style: TextStyle(fontSize: 24)),
-            ),
-            icon: 'assets/icons/home.svg',
+            page: const MyProfileScreen(),
+            icon: "assets/svg/mycourse.svg",
+            isProfile: true,
           ),
         ];
     }
@@ -245,9 +244,7 @@ class _CustomBottomNavbarWidgetState extends State<CustomBottomNavbarWidget> {
           shape: BoxShape.circle,
 
           gradient:
-              isSelected
-                  ? LinearGradient(colors: AppColor.primaryBlueGradient)
-                  : null,
+              isSelected ? LinearGradient(colors: AppColor.goldGradient) : null,
 
           color: isSelected ? null : Colors.white.withOpacity(0.04),
 
@@ -262,7 +259,9 @@ class _CustomBottomNavbarWidgetState extends State<CustomBottomNavbarWidget> {
             width: isTablet ? 28 : 22,
             height: isTablet ? 28 : 22,
             colorFilter: ColorFilter.mode(
-              isSelected ? Colors.white : AppColor.blueGrey,
+              isSelected
+                  ? AppColor.primaryGlassColor
+                  : AppColor.gold.withOpacity(0.7),
               BlendMode.srcIn,
             ),
           ),
@@ -293,9 +292,7 @@ class _CustomBottomNavbarWidgetState extends State<CustomBottomNavbarWidget> {
           shape: BoxShape.circle,
 
           gradient:
-              isSelected
-                  ? LinearGradient(colors: AppColor.primaryBlueGradient)
-                  : null,
+              isSelected ? LinearGradient(colors: AppColor.goldGradient) : null,
         ),
 
         child: Icon(Icons.person, color: AppColor.ghostwhite),

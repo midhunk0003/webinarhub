@@ -59,13 +59,33 @@ class AuthProvider extends ChangeNotifier {
         _failure = failure;
         print("failure: ${failure.message}");
         _status = AuthStatus.failure;
+        notifyListeners();
       },
       (success) async {
+        // =========================
+        // ROLE VALIDATION
+        // =========================
+        // Get role from login response
+        final String? role = success.data?.user?.role?.trim().toLowerCase();
+        // Only trainer and client are allowed
+        if (role != 'trainer' && role != 'client') {
+          _loginMOdel = null;
+
+          _failure = ClientFailure('Unauthorized role: $role');
+
+          _status = AuthStatus.failure;
+
+          // IMPORTANT:
+          // Don't keep the session for an unauthorized role.
+          await localDataSource.clearSession();
+          notifyListeners();
+          return;
+        }
         _loginMOdel = success;
         _status = AuthStatus.success;
+        notifyListeners();
       },
     );
-    notifyListeners();
   }
 
   Future<void> registerProvider(

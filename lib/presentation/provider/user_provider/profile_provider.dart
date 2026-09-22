@@ -1,6 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/widgets.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:lms/core/failure.dart';
 import 'package:lms/core/success.dart';
+import 'package:lms/data/model/get_contact_model/get_contact_model.dart';
 import 'package:lms/data/model/help_center_model/help_center_model.dart';
 import 'package:lms/data/model/profile_model/profile_model.dart';
 import 'package:lms/domain/repository/profile_repository.dart';
@@ -32,6 +36,8 @@ class ProfileProvider extends ChangeNotifier {
 
   bool _isLoadingProfile = false;
   bool _isLoadingupdate = false;
+  bool _isLoadingProfileImage = false;
+  bool _isLoadingGetContact = false;
   Failure? _failure;
   Success? _success;
   ProfileModel? _profileModel;
@@ -43,20 +49,30 @@ class ProfileProvider extends ChangeNotifier {
   List<CartCourseModel> _cartCourses = [];
   List<HelpCenter>? _helpCenterData = [];
 
+  final ImagePicker _imagePicker = ImagePicker();
+
+  File? _selectedProfileImage;
+
   // getter
   List<bool> get selectedItems => _selectedItems;
   bool get selectionMode => _selectionMode;
   bool get showHideQuestionANdAnswer => _showHideQuestionANdAnswer;
   List<CartCourseModel> get cartCourses => _cartCourses;
   List<HelpCenter>? get helpCenterData => _helpCenterData;
+  GetContactModel? _contactModel;
 
   // getter
 
   bool get isLoadingProfile => _isLoadingProfile;
   bool get isLoadingupdate => _isLoadingupdate;
+  bool get isLoadingProfileImage => _isLoadingProfileImage;
+  bool get isLoadingGetContact => _isLoadingGetContact;
   Failure? get failure => _failure;
   Success? get success => _success;
   ProfileModel? get profileModel => _profileModel;
+  GetContactModel? get contactModel => _contactModel;
+
+  File? get selectedProfileImage => _selectedProfileImage;
 
   Future<void> loadCartCourses() async {
     _cartCourses = [
@@ -266,11 +282,125 @@ class ProfileProvider extends ChangeNotifier {
     );
   }
 
+  Future<void> changePassword(
+    String? currentPassword,
+    String? newPassword,
+  ) async {
+    _isLoadingupdate = true;
+    _failure = null;
+    _success = null;
+    notifyListeners();
+    final result = await profileRepository.changePassword(
+      currentPassword ?? '',
+      newPassword ?? '',
+    );
+    result.fold(
+      (failure) {
+        _failure = failure;
+        _isLoadingupdate = false;
+        notifyListeners();
+      },
+      (success) {
+        _success = success;
+        _isLoadingupdate = false;
+        notifyListeners();
+      },
+    );
+  }
+
   Future<void> launchZoomMeeting(String meetingUrl) async {
     print('sssssssssssssss : ${meetingUrl}');
     final Uri uri = Uri.parse(meetingUrl);
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       throw Exception('Could not launch Zoom meeting');
     }
+  }
+
+  Future<void> pickProfileImage(ImageSource source) async {
+    try {
+      final XFile? image = await _imagePicker.pickImage(
+        source: source,
+        imageQuality: 80,
+        maxWidth: 1200,
+      );
+
+      if (image == null) {
+        // User cancelled
+        return;
+      }
+
+      _selectedProfileImage = File(image.path);
+
+      notifyListeners();
+
+      print('Selected image: ${image.path}');
+    } catch (e) {
+      print('Image picker error: $e');
+    }
+  }
+
+  // functions
+
+  void clearSelectedFile() {
+    _selectedProfileImage = null;
+    print('aaaaaaaaaaaa');
+    notifyListeners();
+  }
+
+  Future<void> getContactPro() async {
+    _isLoadingGetContact = true;
+    _failure = null;
+    _success = null;
+    notifyListeners();
+
+    final result = await profileRepository.getContactData();
+    result.fold(
+      (failure) {
+        _failure = failure;
+        _isLoadingGetContact = false;
+        notifyListeners();
+      },
+      (success) {
+        _contactModel = success;
+        _isLoadingGetContact = false;
+        notifyListeners();
+      },
+    );
+  }
+
+  Future<void> uploadProfileImage() async {
+    _isLoadingProfileImage = true;
+    _failure = null;
+    _success = null;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getString('userid');
+
+    if (userId == null || userId.isEmpty) {
+      _failure = ClientFailure('User ID not found');
+      _isLoadingProfile = false;
+      notifyListeners();
+      return;
+    }
+
+    print('Uploading profile image for user ID: $userId');
+    print('Selected profile image: ${_selectedProfileImage?.path}');
+
+    final result = await profileRepository.uploadProfileImage(
+      _selectedProfileImage?.path ?? '',
+      userId,
+    );
+    result.fold(
+      (failure) {
+        _failure = failure;
+        _isLoadingProfileImage = false;
+        notifyListeners();
+      },
+      (success) {
+        _success = success;
+        _isLoadingProfileImage = false;
+        notifyListeners();
+      },
+    );
   }
 }

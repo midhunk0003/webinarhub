@@ -333,7 +333,7 @@ Widget _tab(String text, bool selected, VoidCallback onTap) {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: selected ? AppColor.primaryBlueMid : Colors.transparent,
+          color: selected ? AppColor.goldLight : Colors.transparent,
           borderRadius: BorderRadius.circular(30),
         ),
         child: Text(

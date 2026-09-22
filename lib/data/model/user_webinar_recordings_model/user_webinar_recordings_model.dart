@@ -49,6 +49,12 @@ class WebinarRecordinsData {
   String? recordingUrl;
 
   @JsonKey(fromJson: stringFromJson)
+  String? recordingType;
+
+  @JsonKey(fromJson: stringFromJson)
+  String? recordingTypeName;
+
+  @JsonKey(fromJson: stringFromJson)
   String? duration;
 
   @JsonKey(fromJson: stringFromJson)
@@ -66,6 +72,8 @@ class WebinarRecordinsData {
     this.webinarId,
     this.title,
     this.recordingUrl,
+    this.recordingType,
+    this.recordingTypeName,
     this.duration,
     this.uploadedByUserId,
     this.uploadedByUserName,

@@ -12,15 +12,19 @@ android {
     namespace = "com.webinarhub.lms"
     compileSdk = 36
     ndkVersion = "27.0.12077973"
-
+    
+    buildFeatures {
+        viewBinding = true
+    }
+    
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
         isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
+        jvmTarget = JavaVersion.VERSION_17.toString()
     }
 
     defaultConfig {
@@ -28,7 +32,7 @@ android {
         applicationId = "com.webinarhub.lms"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = 23
+        minSdk = 28
         targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -49,12 +53,25 @@ flutter {
 
 dependencies {
 
+    implementation(project(":mobilertc"))
+
     implementation("androidx.appcompat:appcompat:1.7.0")
+
+    // ADD THIS
+    implementation("androidx.databinding:viewbinding:8.7.3")
+
+    // Jetpack Compose - keep versions aligned
+    implementation(platform("androidx.compose:compose-bom:2024.12.01"))
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-tooling")
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.runtime:runtime")
 
     implementation("androidx.media3:media3-exoplayer:1.4.1")
     implementation("androidx.media3:media3-ui:1.4.1")
-    implementation("androidx.media3:media3-common:1.4.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.4.1")
+
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 

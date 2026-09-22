@@ -135,14 +135,14 @@ class _LectureScreenState extends State<LectureScreen> {
                     pinned: true,
                     delegate: _TabBarDelegate(
                       TabBar(
-                        dividerColor: AppColor.blueGrey,
+                        dividerColor: AppColor.goldDark,
                         labelColor: AppColor.ghostwhite,
                         unselectedLabelColor: Colors.grey,
                         indicatorSize: TabBarIndicatorSize.tab,
                         indicator: BoxDecoration(
                           border: Border(
                             bottom: BorderSide(
-                              color: AppColor.primaryBlueDark,
+                              color: AppColor.goldDark,
                               width: 3,
                             ),
                           ),

@@ -79,7 +79,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
                             Text(
                               '${profileProvider.helpCenterData![indexCategory].categoryName ?? ''}',
                               style: TextStyle(
-                                color: AppColor.blueGrey,
+                                color: AppColor.ghostwhite,
                                 fontSize: _isTablet ? 14 : 12,
                                 fontFamily: 'Urbanist',
                                 fontWeight: FontWeight.w600,

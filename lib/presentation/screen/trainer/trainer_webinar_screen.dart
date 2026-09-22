@@ -179,7 +179,7 @@ class _TrainerWebinarScreenState extends State<TrainerWebinarScreen> {
           final bool isTablet = constraints.maxWidth >= 600;
           return RefreshIndicator(
             onRefresh: _initialData,
-            color: AppColor.formPrimaryColor,
+            color: AppColor.gold,
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.only(bottom: 100),
@@ -307,26 +307,21 @@ class _WebinarFilterBar extends StatelessWidget {
               decoration: BoxDecoration(
                 gradient:
                     isSelected
-                        ? LinearGradient(
-                          colors: [
-                            AppColor.formPrimaryColor,
-                            AppColor.formSecondaryColor,
-                          ],
-                        )
+                        ? LinearGradient(colors: AppColor.goldGradient)
                         : null,
-                color: isSelected ? null : Colors.white.withOpacity(0.06),
+                color: isSelected ? null : AppColor.background,
                 borderRadius: BorderRadius.circular(22),
                 border: Border.all(
                   color:
                       isSelected
                           ? Colors.transparent
-                          : Colors.white.withOpacity(0.10),
+                          : AppColor.formBorderColor.withOpacity(0.24),
                 ),
                 boxShadow:
                     isSelected
                         ? [
                           BoxShadow(
-                            color: AppColor.formPrimaryColor.withOpacity(0.20),
+                            color: AppColor.gold.withOpacity(0.20),
                             blurRadius: 10,
                             offset: const Offset(0, 4),
                           ),
@@ -336,7 +331,10 @@ class _WebinarFilterBar extends StatelessWidget {
               child: Text(
                 filter,
                 style: TextStyle(
-                  color: isSelected ? Colors.white : Colors.white70,
+                  // Selected text = dark
+                  // Unselected text = light
+                  color:
+                      isSelected ? AppColor.buttonText : AppColor.primaryText,
                   fontSize: 13,
                   fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                 ),
@@ -532,9 +530,9 @@ class WebinarTile extends StatelessWidget {
         child: Ink(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.055),
+            color: AppColor.cardBackground,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Colors.white.withOpacity(0.09)),
+            border: Border.all(color: AppColor.borderGlassColor),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -548,15 +546,15 @@ class WebinarTile extends StatelessWidget {
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      AppColor.formPrimaryColor.withOpacity(0.20),
-                      AppColor.formSecondaryColor.withOpacity(0.12),
+                      AppColor.gold.withOpacity(0.20),
+                      AppColor.goldDark.withOpacity(0.12),
                     ],
                   ),
                   borderRadius: BorderRadius.circular(15),
                 ),
                 child: Icon(
                   Icons.video_collection_outlined,
-                  color: AppColor.formPrimaryColor,
+                  color: AppColor.gold.withOpacity(0.18),
                   size: 25,
                 ),
               ),
@@ -841,7 +839,6 @@ class _WebinarEmptyState extends StatelessWidget {
 // ============================================================================
 // ERROR STATE
 // ============================================================================
-
 class _WebinarErrorState extends StatelessWidget {
   final String? message;
   final VoidCallback onRetry;
@@ -927,22 +924,22 @@ class _WebinarSearchBar extends StatelessWidget {
     return Container(
       height: 52,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
+        color: AppColor.background.withOpacity(0.55),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.10)),
+        border: Border.all(color: AppColor.gold.withOpacity(0.20)),
       ),
       child: TextField(
         controller: controller,
         onChanged: onChanged,
         style: const TextStyle(color: Colors.white, fontSize: 14),
-        cursorColor: AppColor.formPrimaryColor,
+        cursorColor: AppColor.gold,
         textInputAction: TextInputAction.search,
         decoration: InputDecoration(
           hintText: 'Search webinars...',
           hintStyle: const TextStyle(color: Colors.white38, fontSize: 14),
           prefixIcon: Icon(
             Icons.search_rounded,
-            color: AppColor.formPrimaryColor,
+            color: AppColor.gold,
             size: 22,
           ),
           suffixIcon: ValueListenableBuilder<TextEditingValue>(

@@ -145,12 +145,12 @@ class CountinueLearningWidget extends StatelessWidget {
                                             gradient: LinearGradient(
                                               begin: Alignment.centerLeft,
                                               end: Alignment.centerRight,
-                                              colors:
-                                                  AppColor.primaryBlueGradient,
+                                              colors: AppColor.goldGradient,
                                             ),
                                             border: Border.all(
-                                              color: AppColor.gradientEnd
-                                                  .withOpacity(0.1),
+                                              color: AppColor.gold.withOpacity(
+                                                0.1,
+                                              ),
                                               width: 1.0,
                                             ),
                                           ),

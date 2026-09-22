@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:lms/core/colors.dart';
 import 'package:lms/core/failure.dart';
+import 'package:lms/core/services/generateZoomJwt.dart';
+import 'package:lms/presentation/provider/trainer_provider/trainer_all_webinar_provider.dart';
 import 'package:lms/presentation/provider/trainer_provider/trainer_dashboard_provider.dart';
 import 'package:lms/presentation/screen/trainer/widget/monthly_chart.dart';
+import 'package:lms/presentation/widgets/common_custome_button_widget.dart';
 import 'package:lms/presentation/widgets/diloges/app_dialog_helper.dart';
 import 'package:lms/presentation/widgets/formatWebinarDate.dart';
 import 'package:lms/presentation/widgets/network_retry_widget.dart';
@@ -39,26 +42,35 @@ class _TrainerHomeScreenState extends State<TrainerHomeScreen> {
 
     print('User ID: $userId');
     final dashprovider = context.read<TrainerDashboardProvider>();
+    final webinarProvider = context.read<TrainerAllWebinarProvider>();
     await Future.wait([
       dashprovider.getDashUpcommingAndAssignPro(),
       dashprovider.getDashOverViewPro(),
+      dashprovider.getProfilePro(),
+      webinarProvider.getNotificationCountPro(),
     ]);
     if (!mounted) return;
-    _handleFailure(dashprovider);
+    _handleFailure(dashprovider, webinarProvider);
   }
 
-  void _handleFailure(TrainerDashboardProvider dashProvider) {
-    if (!mounted) return;
+  void _handleFailure(
+    TrainerDashboardProvider dashProvider,
+    TrainerAllWebinarProvider webinarProvider,
+  ) {
+    if (!mounted || _isDialogShowing) return;
 
-    final failure = dashProvider.failure;
+    final failures = <Failure>[
+      if (dashProvider.failure != null &&
+          dashProvider.failure is! NetworkFailure)
+        dashProvider.failure!,
 
-    // Ignore network failure
-    if (failure == null || failure is NetworkFailure) {
-      return;
-    }
+      if (webinarProvider.failure != null &&
+          webinarProvider.failure is! NetworkFailure)
+        webinarProvider.failure!,
+    ];
 
-    // Prevent multiple dialogs
-    if (_isDialogShowing) {
+    // No non-network failures
+    if (failures.isEmpty) {
       return;
     }
 
@@ -66,13 +78,15 @@ class _TrainerHomeScreenState extends State<TrainerHomeScreen> {
 
     AppDialogHelper.showFailureDialog(
       context: context,
-      failure: failure,
+      failure: failures.first,
       provider: dashProvider,
       onTap: () {
         dashProvider.clearFailure();
+        webinarProvider.clearFailure();
         Navigator.pop(context);
       },
     );
+
     if (mounted) {
       _isDialogShowing = false;
     }
@@ -86,12 +100,11 @@ class _TrainerHomeScreenState extends State<TrainerHomeScreen> {
           final isTablet = constraints.maxWidth > 700;
           return Consumer<TrainerDashboardProvider>(
             builder: (context, trainerDashProvider, _) {
-              final failure = trainerDashProvider.failure;
+              final failure =
+                  trainerDashProvider.failure ?? trainerDashProvider.failure;
               if (failure is NetworkFailure) {
                 return NetWorkRetry(
-                  failureMessage:
-                      trainerDashProvider.failure?.message ??
-                      "No internet connection",
+                  failureMessage: failure?.message ?? "No internet connection",
                   onRetry: () async {
                     await _initialData();
                   },
@@ -108,13 +121,25 @@ class _TrainerHomeScreenState extends State<TrainerHomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       SizedBox(height: 66),
-                      HomeHeaderSectionWidget(
-                        isTablet: isTablet,
-                        title: "Hello Trainer 👋",
-                        subTitle: "Manage your webinars easily",
-                        showNotificationIcon: true,
-                        showProfileImage: false,
-                      ),
+                      trainerDashProvider.isLoadingProfile
+                          ? _buildShimmerHeader()
+                          : HomeHeaderSectionWidget(
+                            isTablet: isTablet,
+                            title:
+                                trainerDashProvider
+                                    .profileModel
+                                    ?.data
+                                    ?.fullName,
+                            subTitle:
+                                trainerDashProvider.profileModel?.data?.email,
+                            profileImageUrl:
+                                trainerDashProvider
+                                    .profileModel
+                                    ?.data
+                                    ?.profileImageUrl,
+                            showNotificationIcon: true,
+                            showProfileImage: true,
+                          ),
                       const SizedBox(height: 25),
                       DashboardTitle(
                         "Upcomming Webinars",
@@ -126,6 +151,7 @@ class _TrainerHomeScreenState extends State<TrainerHomeScreen> {
                           ? UpcomingWebinarCardShimmer()
                           : UpcomingWebinarCard(
                             trainerDashProvider: trainerDashProvider,
+                            isTablet: isTablet,
                           ),
                       const SizedBox(height: 25),
                       DashboardTitle("Recent Webinars", true, widget.onViewAll),
@@ -242,7 +268,12 @@ class DashboardTitle extends StatelessWidget {
 
 class UpcomingWebinarCard extends StatelessWidget {
   final TrainerDashboardProvider trainerDashProvider;
-  const UpcomingWebinarCard({super.key, required this.trainerDashProvider});
+  final bool isTablet;
+  const UpcomingWebinarCard({
+    super.key,
+    required this.trainerDashProvider,
+    required this.isTablet,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -323,21 +354,37 @@ class UpcomingWebinarCard extends StatelessWidget {
 
             Row(
               children: [
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    await trainerDashProvider.launchZoomMeeting(
-                      trainerDashProvider
-                              .trainerUpcommingAndAssignedModel
-                              ?.data
-                              ?.upcomingWebinar!
-                              .meetingUrl ??
-                          '',
-                    );
-                  },
-                  icon: const Icon(Icons.video_call),
-                  label: const Text("Join"),
+                // ElevatedButton.icon(
+                //   onPressed: () async {
+                //     await trainerDashProvider.launchZoomMeeting(
+                //       trainerDashProvider
+                //               .trainerUpcommingAndAssignedModel
+                //               ?.data
+                //               ?.upcomingWebinar!
+                //               .meetingUrl ??
+                //           '',
+                //     );
+                //   },
+                //   icon: const Icon(Icons.video_call),
+                //   label: const Text("Join"),
+                // ),
+                Expanded(
+                  child: CommonCustomeButtonWidget(
+                    isTablet: isTablet,
+                    text: "Join",
+                    icon: Icons.video_call,
+                    onTap: () async {
+                      await trainerDashProvider.launchZoomMeeting(
+                        trainerDashProvider
+                                .trainerUpcommingAndAssignedModel
+                                ?.data
+                                ?.upcomingWebinar
+                                ?.meetingUrl ??
+                            '',
+                      );
+                    },
+                  ),
                 ),
-
                 const Spacer(),
 
                 const Icon(Icons.people, color: Colors.white),
@@ -571,7 +618,7 @@ class WebinarList extends StatelessWidget {
       itemBuilder: (context, index) {
         return WebinarTile(
           title: webinars[index].title ?? '',
-          status: webinars[index].status == '1' ? 'Published' : 'Draft',
+          status: _getStatusText(webinars[index].status),
           students: webinars[index].enrolledCount ?? '0',
           startDateTime: webinars[index].startDateTime ?? '',
           recentWebinarId: webinars[index].id.toString() ?? '',
@@ -596,6 +643,28 @@ class WebinarTile extends StatelessWidget {
     required this.startDateTime,
     required this.recentWebinarId,
   });
+  // ============================================================
+  // STATUS COLOR
+  // ============================================================
+
+  Color _statusColor() {
+    switch (status.toLowerCase()) {
+      case 'live':
+        return Colors.redAccent;
+
+      case 'scheduled':
+        return Colors.orangeAccent;
+
+      case 'completed':
+        return Colors.greenAccent;
+
+      case 'cancelled':
+        return Colors.redAccent;
+
+      default:
+        return Colors.white70;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -614,9 +683,9 @@ class WebinarTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(.05),
+          color: AppColor.cardBackground,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.white.withOpacity(.08)),
+          border: Border.all(color: AppColor.gold.withOpacity(.14)),
         ),
         child: Row(
           children: [
@@ -625,12 +694,12 @@ class WebinarTile extends StatelessWidget {
               height: 48,
               width: 48,
               decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(.15),
+                color: AppColor.gold.withOpacity(.10),
                 borderRadius: BorderRadius.circular(14),
               ),
               child: const Icon(
                 Icons.video_collection_outlined,
-                color: Colors.blue,
+                color: AppColor.gold,
                 size: 24,
               ),
             ),
@@ -660,25 +729,27 @@ class WebinarTile extends StatelessWidget {
 
                       const SizedBox(width: 8),
 
-                      // Status
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.green.withOpacity(.12),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          status,
-                          style: const TextStyle(
-                            color: Colors.greenAccent,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
+                      _StatusBadge(status: status, color: _statusColor()),
+
+                      // // Status
+                      // Container(
+                      //   padding: const EdgeInsets.symmetric(
+                      //     horizontal: 8,
+                      //     vertical: 4,
+                      //   ),
+                      //   decoration: BoxDecoration(
+                      //     color: Colors.green.withOpacity(.12),
+                      //     borderRadius: BorderRadius.circular(8),
+                      //   ),
+                      //   child: Text(
+                      //     status,
+                      //     style: const TextStyle(
+                      //       color: Colors.greenAccent,
+                      //       fontSize: 11,
+                      //       fontWeight: FontWeight.w600,
+                      //     ),
+                      //   ),
+                      // ),
                     ],
                   ),
 
@@ -980,4 +1051,125 @@ Widget _shimmerTile() {
       ),
     ),
   );
+}
+
+Widget _buildShimmerHeader() {
+  return Shimmer.fromColors(
+    baseColor: Colors.white.withOpacity(0.08),
+    highlightColor: Colors.white.withOpacity(0.20),
+    child: Row(
+      children: [
+        // Profile image dummy
+        Container(
+          width: 60,
+          height: 60,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+          ),
+        ),
+
+        const SizedBox(width: 12),
+
+        // Name + subtitle dummy
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 160,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              Container(
+                width: 200,
+                height: 14,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(5),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(width: 12),
+
+        // Notification dummy
+        Container(
+          width: 54,
+          height: 54,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+String _getStatusText(dynamic status) {
+  if (status == null) {
+    return 'Unknown';
+  }
+
+  final String value = status.toString();
+
+  switch (value) {
+    case '2':
+      return 'Scheduled';
+
+    case '3':
+      return 'Live';
+
+    case '4':
+      return 'Completed';
+
+    case '5':
+      return 'Cancelled';
+
+    default:
+      return value.isEmpty ? 'Unknown' : value;
+  }
+}
+// ============================================================================
+// STATUS BADGE
+// ============================================================================
+
+class _StatusBadge extends StatelessWidget {
+  final String status;
+  final Color color;
+
+  const _StatusBadge({required this.status, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final String text = status.trim().isEmpty ? 'Unknown' : status;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.18)),
+      ),
+      child: Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
 }

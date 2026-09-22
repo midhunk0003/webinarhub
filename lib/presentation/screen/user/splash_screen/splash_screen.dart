@@ -44,6 +44,7 @@ class _SplashScreenState extends State<SplashScreen>
       final isOnboardFinish = pref.getString('onboard');
       final userRole = pref.getString('role');
       print('is onboard finish: ${isOnboardFinish}');
+      print('Role.................: ${userRole}');
 
       /// TOKEN CHECK
       final hasUserToken = await _hasToken();
@@ -116,9 +117,9 @@ class _SplashScreenState extends State<SplashScreen>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                'LMS',
+                'WWITPL',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppColor.goldDark,
                   fontFamily: 'AfacadFlux',
                   fontWeight: FontWeight.w400,
                   fontSize: 60,
@@ -127,7 +128,7 @@ class _SplashScreenState extends State<SplashScreen>
               Text(
                 'The journey to knowing',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: AppColor.ghostwhite,
                   fontFamily: 'AfacadFlux',
                   fontWeight: FontWeight.w400,
                   fontSize: 16,

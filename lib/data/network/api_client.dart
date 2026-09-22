@@ -583,14 +583,48 @@ class ApiClient {
     }
 
     /// ================= CLIENT ERROR =================
+    // if (statusCode >= 400 && statusCode < 500) {
+    //   print(
+    //     'Client error with status code: $statusCode and body: ${response.body}',
+    //   );
+
+    //   final message =
+    //       decoded?['message']?.toString() ??
+    //       decoded?['error']?.toString() ??
+    //       'Invalid request';
+    //   return Left(ClientFailure(message));
+    // }
+
+    /// ================= CLIENT ERROR =================
     if (statusCode >= 400 && statusCode < 500) {
       print(
         'Client error with status code: $statusCode and body: ${response.body}',
       );
-      final message =
-          decoded?['message']?.toString() ??
-          decoded?['error']?.toString() ??
-          'Invalid request';
+
+      String message = 'Invalid request';
+
+      if (decoded != null) {
+        // 1. Check validation errors first
+        final errors = decoded['errors'];
+
+        if (errors is Map && errors.isNotEmpty) {
+          final firstError = errors.values.first;
+
+          if (firstError is List && firstError.isNotEmpty) {
+            message = firstError.first.toString();
+          } else if (firstError != null) {
+            message = firstError.toString();
+          }
+        }
+        // 2. Otherwise use normal message
+        else {
+          message =
+              decoded['message']?.toString() ??
+              decoded['error']?.toString() ??
+              'Invalid request';
+        }
+      }
+
       return Left(ClientFailure(message));
     }
 

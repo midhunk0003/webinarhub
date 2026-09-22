@@ -73,7 +73,7 @@ class CommonTextFormField<T extends ChangeNotifier> extends StatelessWidget {
                   return TextFormField(
                     controller: controller,
                     obscureText: obscureText,
-                    cursorColor: AppColor.formSecondaryColor,
+                    cursorColor: AppColor.gold,
                     style: TextStyle(
                       color: AppColor.primaryText,
                       fontSize: rs(_isTablet ? 15 : 14),
@@ -85,7 +85,7 @@ class CommonTextFormField<T extends ChangeNotifier> extends StatelessWidget {
                                 Icons.search_rounded,
                                 weight: 20,
                                 size: 20,
-                                color: AppColor.blueGrey,
+                                color: AppColor.gold,
                               )
                               : null,
                       hintText: hintText,

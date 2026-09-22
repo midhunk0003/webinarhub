@@ -63,7 +63,27 @@ class JoinData {
   @JsonKey(fromJson: stringFromJson)
   String? meetingPassword;
 
-  JoinData({this.meetingUrl, this.meetingId, this.meetingPassword});
+  @JsonKey(fromJson: stringFromJson)
+  String? userName;
+
+  @JsonKey(fromJson: stringFromJson)
+  String? userEmail;
+
+  @JsonKey(fromJson: stringFromJson)
+  String? sdkJwt;
+
+  @JsonKey(fromJson: stringFromJson)
+  String? registrantToken;
+
+  JoinData({
+    this.meetingUrl,
+    this.meetingId,
+    this.meetingPassword,
+    this.userName,
+    this.userEmail,
+    this.sdkJwt,
+    this.registrantToken,
+  });
 
   factory JoinData.fromJson(Map<String, dynamic> json) {
     return _$JoinDataFromJson(json);
