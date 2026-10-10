@@ -119,6 +119,7 @@ void showPaymentGatewayBottomSheet({
                       description: description,
                       razorpayService: razorpayService,
                       paymentProvider: paymentProvider,
+                      // ADD
                     );
                   },
                 ),
@@ -145,6 +146,7 @@ Widget _paymentGatewayTile({
   required String description,
   required RazorpayService razorpayService,
   required PaymentProvider paymentProvider,
+  // ADD
 }) {
   return AnimatedBuilder(
     animation: paymentProvider,
@@ -356,6 +358,7 @@ Future<void> _handleSelectedGateway({
       );
       return;
     }
+
     // ===========================================================
     // 4. GET CREATE ORDER RESPONSE
     // ===========================================================
@@ -398,6 +401,27 @@ Future<void> _handleSelectedGateway({
     debugPrint('Payment ID: ${paymentData.paymentId}');
 
     debugPrint('Gateway: ${paymentData.gateway}');
+    // ===========================================================
+    // IMPORTANT
+    //
+    // This is YOUR BACKEND payment record ID.
+    //
+    // Example:
+    // paymentId = 71
+    //
+    // DO NOT confuse this with Razorpay paymentId.
+    // ===========================================================
+
+    final backendPaymentId = paymentData.paymentId;
+
+    if (backendPaymentId == null) {
+      _showError(pageContext, 'Backend payment ID was not returned.');
+      return;
+    }
+
+    debugPrint('API create Order Backend Payment ID: $backendPaymentId');
+
+    debugPrint('Backend Payment ID: $backendPaymentId');
 
     // ===========================================================
     // 7. GET CLIENT CONFIG

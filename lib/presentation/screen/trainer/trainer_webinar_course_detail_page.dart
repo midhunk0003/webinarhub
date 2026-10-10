@@ -9,6 +9,7 @@ import 'package:lms/core/services/zoom_meating_data.dart';
 import 'package:lms/presentation/provider/payment_provider.dart';
 import 'package:lms/presentation/provider/permission_provider.dart';
 import 'package:lms/presentation/provider/trainer_provider/trainer_course_provider.dart';
+import 'package:lms/presentation/provider/user_provider/user_course_provider.dart';
 import 'package:lms/presentation/screen/google_drive_video_player.dart';
 import 'package:lms/presentation/screen/trainer/resource_view_screen.dart';
 import 'package:lms/presentation/screen/trainer/widget/course_detail_shimmer.dart';
@@ -52,6 +53,7 @@ class _TrainerWebinarCourseDetailPageState
     if (!mounted) return;
     final courseDetailProvider = context.read<TrainerCourseProvider>();
     final permissionProvider = context.read<PermissionProvider>();
+    final userCourseProvider = context.read<UserCourseProvider>();
 
     await Future.wait([
       courseDetailProvider.getCourseDetailPro(widget.courseId ?? ''),
@@ -60,18 +62,24 @@ class _TrainerWebinarCourseDetailPageState
       permissionProvider.getPermissionPro(),
     ]);
     if (!mounted) return;
-    _handleFailure(courseDetailProvider, permissionProvider);
+    _handleFailure(
+      courseDetailProvider,
+      permissionProvider,
+      userCourseProvider,
+    );
   }
 
   void _handleFailure(
     TrainerCourseProvider courseDetailProvider,
     PermissionProvider permissionProvider,
+    UserCourseProvider userCourseProvider,
   ) {
     if (_isDialogShowing) return;
 
     final failures = <Failure>[
       if (courseDetailProvider.failure != null) courseDetailProvider.failure!,
       if (permissionProvider.failure != null) permissionProvider.failure!,
+      if (userCourseProvider.failure != null) userCourseProvider.failure!,
     ];
 
     if (!mounted || failures.isEmpty) return;
@@ -92,6 +100,7 @@ class _TrainerWebinarCourseDetailPageState
       onTap: () {
         courseDetailProvider.clearFailure();
         permissionProvider.clearFailure();
+        userCourseProvider.clearFailure();
         Navigator.pop(context);
       },
     );
@@ -104,8 +113,18 @@ class _TrainerWebinarCourseDetailPageState
   @override
   Widget build(BuildContext context) {
     return Reusablebackground(
-      child: Consumer2<TrainerCourseProvider, PermissionProvider>(
-        builder: (context, trainerCourseProvider, permissionProvider, _) {
+      child: Consumer3<
+        TrainerCourseProvider,
+        PermissionProvider,
+        UserCourseProvider
+      >(
+        builder: (
+          context,
+          trainerCourseProvider,
+          permissionProvider,
+          userCourseProvider,
+          _,
+        ) {
           final failure =
               trainerCourseProvider.failure ?? permissionProvider.failure;
           if (failure is NetworkFailure) {
@@ -1052,108 +1071,377 @@ class _TrainerWebinarCourseDetailPageState
                               //     );
                               //   },
                               // ),
+
+                              // Join button
                               CommonCustomeButtonWidget(
-                                isTablet: isTablet,
-                                text: "Join To Train",
-                                onTap: () async {
-                                  // =====================================================
-                                  // YOUR ZOOM URL
-                                  // =====================================================
+                                isTablet: false,
+                                text:
+                                    userCourseProvider.isLoadingJoinData
+                                        ? 'Please wait...'
+                                        : 'Join',
 
-                                  const zoomUrl =
-                                      "https://app.zoom.us/wc/81150519342/start?fromPWA=1&pwd=fnYCVNOw1pF5WRdU3uQWDRX69ZBo5x.1";
+                                onTap:
+                                    userCourseProvider.isLoadingJoinData
+                                        ? null
+                                        : () async {
+                                          try {
+                                            await userCourseProvider
+                                                .userJoinDataPro(
+                                                  widget.courseId.toString(),
+                                                  '2',
+                                                );
+                                            print(
+                                              'Join Webinar Result: ${userCourseProvider.success}',
+                                            );
+                                            if (!mounted) return;
 
-                                  final zoomData = parseZoomUrl(zoomUrl);
+                                            if (userCourseProvider
+                                                    .userJoinWebinarModel !=
+                                                null) {
+                                              final meetingUrl =
+                                                  userCourseProvider
+                                                      .userJoinWebinarModel
+                                                      ?.data
+                                                      ?.meetingUrl ??
+                                                  '';
 
-                                  // =====================================================
-                                  // VALIDATE MEETING ID
-                                  // =====================================================
+                                              final meetingIdApi =
+                                                  userCourseProvider
+                                                      .userJoinWebinarModel
+                                                      ?.data
+                                                      ?.meetingId ??
+                                                  '';
 
-                                  if (zoomData.meetingNumber.isEmpty) {
-                                    debugPrint("Zoom Meeting ID not found");
-                                    return;
-                                  }
+                                              final meetingPassApi =
+                                                  userCourseProvider
+                                                      .userJoinWebinarModel
+                                                      ?.data
+                                                      ?.meetingPassword ??
+                                                  '';
 
-                                  // =====================================================
-                                  // USER NAME
-                                  // =====================================================
+                                              final meetingJwtApi =
+                                                  userCourseProvider
+                                                      .userJoinWebinarModel
+                                                      ?.data
+                                                      ?.sdkJwt ??
+                                                  '';
 
-                                  const userName = "Test Student";
+                                              // if (meetingUrl.isEmpty) {
+                                              //   ScaffoldMessenger.of(
+                                              //     context,
+                                              //   ).showSnackBar(
+                                              //     const SnackBar(
+                                              //       content: Text(
+                                              //         'Unable to open the webinar. Meeting link not found.',
+                                              //       ),
+                                              //     ),
+                                              //   );
+                                              //   return;
+                                              // }
 
-                                  // =====================================================
-                                  // GENERATE ZOOM MEETING SDK JWT
-                                  // =====================================================
+                                              // await userCourseProvider
+                                              //     .launchZoomMeeting(
+                                              //       meetingUrl,
+                                              //     );
+                                              // =====================================================
+                                              // YOUR ZOOM URL
+                                              // =====================================================
 
-                                  final jwt = generateZoomJwt(
-                                    clientId: "0qw_HEqbTJSsU1wSbPThw",
-                                    clientSecret:
-                                        "Fh1lhH5qMVbFHHOrFACJMf3CrcRRGtEu",
-                                    meetingNumber: ' ${zoomData.meetingNumber}',
-                                  );
+                                              // const zoomUrl =
+                                              //     "https://app.zoom.us/wc/84228660846/start?fromPWA=1&pwd=3KNfc1lTxRv8XHK6rxuHSyvGiRH0Xa.1";
 
-                                  debugPrint(
-                                    "Zoom Meeting ID: ${zoomData.meetingNumber}",
-                                  );
+                                              const zoomUrl =
+                                                  "https://us05web.zoom.us/j/85663818907?pwd=E2qEiJtJlZWojWsviYh7s5M7XCHF1h.1";
+                                              final zoomData = parseZoomUrl(
+                                                zoomUrl,
+                                              );
 
-                                  debugPrint(
-                                    "Zoom Password: ${zoomData.password}",
-                                  );
+                                              // =====================================================
+                                              // VALIDATE MEETING ID
+                                              // =====================================================
 
-                                  debugPrint("jwt print: $jwt");
+                                              if (zoomData
+                                                  .meetingNumber
+                                                  .isEmpty) {
+                                                debugPrint(
+                                                  "Zoom Meeting ID not found",
+                                                );
+                                                return;
+                                              }
 
-                                  // =====================================================
-                                  // SEND TO ANDROID
-                                  // =====================================================
+                                              // =====================================================
+                                              // USER NAME
+                                              // =====================================================
 
-                                  try {
-                                    final bool? result = await zoomPlatform
-                                        .invokeMethod<bool>("joinZoomMeeting", {
-                                          "meetingNumber":
-                                              zoomData.meetingNumber,
-                                          "meetingPassword": zoomData.password,
-                                          "userName": userName,
-                                          "jwt": jwt,
-                                        });
+                                              const userName = "Test Student";
 
-                                    if (!mounted) {
-                                      return;
-                                    }
+                                              // =====================================================
+                                              // GENERATE ZOOM MEETING SDK JWT
+                                              // =====================================================
 
-                                    debugPrint(
-                                      "Zoom finished. Result = $result",
-                                    );
+                                              // final jwt = generateZoomJwt(
+                                              //   clientId:
+                                              //       "0qw_HEqbTJSsU1wSbPThw",
+                                              //   clientSecret:
+                                              //       "Fh1lhH5qMVbFHHOrFACJMf3CrcRRGtEu",
+                                              //   meetingNumber:
+                                              //       '${zoomData.meetingNumber}',
+                                              // );
 
-                                    // Refresh the Detail Page after returning from Zoom.
-                                    await _initialData();
+                                              // final jwt = generateZoomJwt(
+                                              //   clientId:
+                                              //       "ThCVsAiWRSag9kEVQbzZiw",
+                                              //   clientSecret:
+                                              //       "eE47oI40X2hU8vIjs8iY1hWvjaCF9Y39",
+                                              //   meetingNumber:
+                                              //       '${zoomData.meetingNumber}',
+                                              // );
 
-                                    if (!mounted) {
-                                      return;
-                                    }
+                                              final jwt = generateZoomJwt(
+                                                clientId:
+                                                    "ThCVsAiWRSag9kEVQbzZiw",
+                                                clientSecret:
+                                                    "eE47oI40X2hU8vIjs8iY1hWvjaCF9Y39",
+                                                meetingNumber:
+                                                    '${zoomData.meetingNumber}',
+                                              );
 
-                                    setState(() {});
-                                  } on PlatformException catch (e) {
-                                    debugPrint(
-                                      "Zoom error: ${e.code} - ${e.message}",
-                                    );
+                                              debugPrint(
+                                                "Zoom Meeting ID : ${zoomData.meetingNumber}",
+                                              );
 
-                                    if (!mounted) {
-                                      return;
-                                    }
+                                              debugPrint(
+                                                "Zoom Password: ${zoomData.password}",
+                                              );
 
-                                    // Stay on the existing Detail Page.
-                                    // Optionally show an error message.
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          e.message ??
-                                              "Unable to join Zoom meeting",
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                },
+                                              debugPrint("jwt print: $jwt");
+
+                                              // =====================================================
+                                              // SEND TO ANDROID
+                                              // =====================================================
+
+                                              try {
+                                                final bool?
+                                                result = await zoomPlatform
+                                                    .invokeMethod<bool>(
+                                                      "joinZoomMeeting",
+                                                      {
+                                                        "meetingNumber":
+                                                            '${meetingIdApi}',
+                                                        "meetingPassword":
+                                                            '${meetingPassApi}',
+                                                        "userName": userName,
+                                                        "jwt": meetingJwtApi,
+                                                      },
+                                                    );
+
+                                                // final bool? result =
+                                                //     await zoomPlatform
+                                                //         .invokeMethod<bool>(
+                                                //           "joinZoomMeeting",
+                                                //           {
+                                                //             "meetingNumber":
+                                                //                 meetingIdApi,
+                                                //             "meetingPassword":
+                                                //                 meetingPassApi,
+                                                //             "userName":
+                                                //                 userName,
+                                                //             "jwt": jwt,
+                                                //           },
+                                                //         );
+
+                                                if (!mounted) {
+                                                  return;
+                                                }
+
+                                                debugPrint(
+                                                  "Zoom finished. Result = $result",
+                                                );
+
+                                                // Refresh the Detail Page after returning from Zoom.
+                                                await _initialData();
+
+                                                if (!mounted) {
+                                                  return;
+                                                }
+
+                                                setState(() {});
+                                              } on PlatformException catch (e) {
+                                                debugPrint(
+                                                  "Zoom error: ${e.code} - ${e.message}",
+                                                );
+
+                                                if (!mounted) {
+                                                  return;
+                                                }
+
+                                                // Stay on the existing Detail Page.
+                                                // Optionally show an error message.
+                                                ScaffoldMessenger.of(
+                                                  context,
+                                                ).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                      e.message ??
+                                                          "Unable to join Zoom meeting",
+                                                    ),
+                                                  ),
+                                                );
+                                              }
+                                            } else if (userCourseProvider
+                                                    .failure !=
+                                                null) {
+                                              // IMPORTANT: // Here you need to identify whether the API failure // means "payment required".
+                                              // // // Replace this condition with your actual API // errorCode/status/message.
+                                              final failureMessage =
+                                                  userCourseProvider
+                                                      .failure
+                                                      ?.message
+                                                      ?.toString() ??
+                                                  '';
+                                              final lowerMessage =
+                                                  failureMessage.toLowerCase();
+                                              debugPrint(
+                                                'Join API Failure: $failureMessage',
+                                              );
+
+                                              _handleFailure(
+                                                trainerCourseProvider,
+                                                permissionProvider,
+                                                userCourseProvider,
+                                              );
+                                            } else {
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'Something went wrong. Please try again.',
+                                                  ),
+                                                ),
+                                              );
+                                            }
+                                          } catch (e) {
+                                            if (!mounted) return;
+
+                                            ScaffoldMessenger.of(
+                                              context,
+                                            ).showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                  'Unable to join the webinar. Please try again.',
+                                                ),
+                                              ),
+                                            );
+
+                                            debugPrint(
+                                              'Join webinar error: $e',
+                                            );
+                                          }
+                                        },
                               ),
 
+                              // CommonCustomeButtonWidget(
+                              //   isTablet: isTablet,
+                              //   text: "Join To Train",
+                              //   onTap: () async {
+                              //     // =====================================================
+                              //     // YOUR ZOOM URL
+                              //     // =====================================================
+
+                              //     const zoomUrl =
+                              //         "https://app.zoom.us/wc/81150519342/start?fromPWA=1&pwd=fnYCVNOw1pF5WRdU3uQWDRX69ZBo5x.1";
+
+                              //     final zoomData = parseZoomUrl(zoomUrl);
+
+                              //     // =====================================================
+                              //     // VALIDATE MEETING ID
+                              //     // =====================================================
+
+                              //     if (zoomData.meetingNumber.isEmpty) {
+                              //       debugPrint("Zoom Meeting ID not found");
+                              //       return;
+                              //     }
+
+                              //     // =====================================================
+                              //     // USER NAME
+                              //     // =====================================================
+
+                              //     const userName = "Test Student";
+
+                              //     // =====================================================
+                              //     // GENERATE ZOOM MEETING SDK JWT
+                              //     // =====================================================
+
+                              //     final jwt = generateZoomJwt(
+                              //       clientId: "0qw_HEqbTJSsU1wSbPThw",
+                              //       clientSecret:
+                              //           "Fh1lhH5qMVbFHHOrFACJMf3CrcRRGtEu",
+                              //       meetingNumber: ' ${zoomData.meetingNumber}',
+                              //     );
+
+                              //     debugPrint(
+                              //       "Zoom Meeting ID: ${zoomData.meetingNumber}",
+                              //     );
+
+                              //     debugPrint(
+                              //       "Zoom Password: ${zoomData.password}",
+                              //     );
+
+                              //     debugPrint("jwt print: $jwt");
+
+                              //     // =====================================================
+                              //     // SEND TO ANDROID
+                              //     // =====================================================
+
+                              //     try {
+                              //       final bool? result = await zoomPlatform
+                              //           .invokeMethod<bool>("joinZoomMeeting", {
+                              //             "meetingNumber":
+                              //                 zoomData.meetingNumber,
+                              //             "meetingPassword": zoomData.password,
+                              //             "userName": userName,
+                              //             "jwt": jwt,
+                              //           });
+
+                              //       if (!mounted) {
+                              //         return;
+                              //       }
+
+                              //       debugPrint(
+                              //         "Zoom finished. Result = $result",
+                              //       );
+
+                              //       // Refresh the Detail Page after returning from Zoom.
+                              //       await _initialData();
+
+                              //       if (!mounted) {
+                              //         return;
+                              //       }
+
+                              //       setState(() {});
+                              //     } on PlatformException catch (e) {
+                              //       debugPrint(
+                              //         "Zoom error: ${e.code} - ${e.message}",
+                              //       );
+
+                              //       if (!mounted) {
+                              //         return;
+                              //       }
+
+                              //       // Stay on the existing Detail Page.
+                              //       // Optionally show an error message.
+                              //       ScaffoldMessenger.of(context).showSnackBar(
+                              //         SnackBar(
+                              //           content: Text(
+                              //             e.message ??
+                              //                 "Unable to join Zoom meeting",
+                              //           ),
+                              //         ),
+                              //       );
+                              //     }
+                              //   },
+                              // ),
                               const SizedBox(height: 30),
                             ],
                           ),

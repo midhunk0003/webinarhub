@@ -1,21 +1,21 @@
 {
   "project_info": {
-    "project_number": "878948083794",
-    "project_id": "wwitplwebinarapp",
-    "storage_bucket": "wwitplwebinarapp.firebasestorage.app"
+    "project_number": "226283225993",
+    "project_id": "webinarhubwwitpl",
+    "storage_bucket": "webinarhubwwitpl.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:878948083794:android:7eb06b2509529bf9a4d78b",
+        "mobilesdk_app_id": "1:226283225993:android:072c7e07441fc26a061758",
         "android_client_info": {
-          "package_name": "com.webinarhub.lms"
+          "package_name": "com.wwitplwebinarhub.lms"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDW0mgwq3CC4iJBh9_Cz4T-oHt6RGknPTQ"
+          "current_key": "AIzaSyC8AYkLZggxDm_I9qirx30QwxfOw2jhObY"
         }
       ],
       "services": {

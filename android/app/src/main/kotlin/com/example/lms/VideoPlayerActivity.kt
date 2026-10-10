@@ -1,8 +1,9 @@
-package com.webinarhub.lms
+package com.wwitplwebinarhub.lms
 
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
@@ -25,6 +26,7 @@ import androidx.activity.ComponentActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
@@ -32,61 +34,247 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
+import androidx.media3.common.VideoSize
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import androidx.media3.ui.AspectRatioFrameLayout
-import androidx.media3.ui.PlayerView
+import android.view.TextureView
+
+
+/**
+ * TextureView that keeps the decoded video frame's aspect ratio.
+ *
+ * Media3 is attached directly to this view to avoid PlayerView/legacy
+ * ExoPlayer UI resource collisions caused by the Zoom mobilertc module.
+ *
+ * The video is FIT_CENTER style:
+ * - landscape video stays landscape
+ * - portrait video stays portrait
+ * - no stretching
+ * - no cropping
+ * - unused space remains black
+ */
+private class VideoTextureView(
+    context: android.content.Context
+) : TextureView(context) {
+
+    private var videoAspectRatio = 16f / 9f
+
+    fun setVideoAspectRatio(
+        width: Int,
+        height: Int,
+        pixelWidthHeightRatio: Float = 1f,
+        rotationDegrees: Int = 0
+    ) {
+        if (width <= 0 || height <= 0) return
+
+        var ratio =
+            (width.toFloat() * pixelWidthHeightRatio) /
+                height.toFloat()
+
+        if (rotationDegrees == 90 || rotationDegrees == 270) {
+            ratio = 1f / ratio
+        }
+
+        if (ratio.isFinite() && ratio > 0f) {
+            videoAspectRatio = ratio
+            post {
+                updateVideoTransform()
+            }
+        }
+    }
+
+    override fun onSizeChanged(
+        w: Int,
+        h: Int,
+        oldw: Int,
+        oldh: Int
+    ) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        updateVideoTransform()
+    }
+
+    private fun updateVideoTransform() {
+        val viewWidth = width
+        val viewHeight = height
+
+        if (viewWidth <= 0 || viewHeight <= 0) return
+        if (!videoAspectRatio.isFinite() || videoAspectRatio <= 0f) return
+
+        val viewAspect =
+            viewWidth.toFloat() / viewHeight.toFloat()
+
+        var scaleX = 1f
+        var scaleY = 1f
+
+        // The TextureView surface itself is the full screen size.
+        // Scale its content down to FIT_CENTER without cropping.
+        if (viewAspect > videoAspectRatio) {
+            // View is wider than the video.
+            scaleX =
+                videoAspectRatio / viewAspect
+        } else if (viewAspect < videoAspectRatio) {
+            // View is taller/narrower than the video.
+            scaleY =
+                viewAspect / videoAspectRatio
+        }
+
+        val matrix = Matrix()
+
+        matrix.setScale(
+            scaleX,
+            scaleY,
+            viewWidth / 2f,
+            viewHeight / 2f
+        )
+
+        setTransform(matrix)
+    }
+}
 
 class VideoPlayerActivity : ComponentActivity() {
 
     companion object {
         private const val TAG = "VideoPlayer"
+
         private const val SEEK_INCREMENT_MS = 10_000L
+
+        private const val CONTROL_HIDE_DELAY = 4000L
+
+        private const val CONNECTION_TIMEOUT = 30_000
+
+        private const val READ_TIMEOUT = 30_000
     }
+
+    // ---------------------------------------------------------
+    // PLAYER
+    // ---------------------------------------------------------
 
     private var player: ExoPlayer? = null
 
+    // ---------------------------------------------------------
+    // MAIN UI
+    // ---------------------------------------------------------
+
     private lateinit var rootView: FrameLayout
+
     private lateinit var videoContainer: FrameLayout
-    private lateinit var playerView: PlayerView
+
+    private lateinit var videoTextureView: VideoTextureView
+
     private lateinit var loadingView: ProgressBar
+
+    // ---------------------------------------------------------
+    // ERROR UI
+    // ---------------------------------------------------------
+
     private lateinit var errorContainer: FrameLayout
+
     private lateinit var errorText: TextView
+
     private lateinit var retryButton: Button
+
+    private var errorDialog: android.app.AlertDialog? = null
+
+    // ---------------------------------------------------------
+    // TOP BAR
+    // ---------------------------------------------------------
+
     private lateinit var titleView: TextView
+
     private lateinit var topBar: LinearLayout
 
-    // Professional custom Netflix-style controller.
+    // ---------------------------------------------------------
+    // CONTROLS
+    // ---------------------------------------------------------
+
     private lateinit var controlsOverlay: FrameLayout
+
     private lateinit var centerControls: LinearLayout
+
     private lateinit var bottomControls: LinearLayout
+
     private lateinit var qualityButton: Button
+
     private lateinit var fullscreenButton: Button
+
     private lateinit var speedButton: Button
+
     private lateinit var rewindButton: Button
+
     private lateinit var playPauseButton: Button
+
     private lateinit var forwardButton: Button
+
     private lateinit var seekBar: SeekBar
+
     private lateinit var currentTimeLabel: TextView
+
     private lateinit var totalTimeLabel: TextView
 
-    private val controlsHandler = Handler(Looper.getMainLooper())
-    private val controlsHideRunnable = Runnable { hideControls(true) }
-    private val progressRunnable = object : Runnable {
-        override fun run() {
-            updateProgress()
-            controlsHandler.postDelayed(this, 500L)
+    // ---------------------------------------------------------
+    // HANDLERS
+    // ---------------------------------------------------------
+
+    private val controlsHandler =
+        Handler(Looper.getMainLooper())
+
+    private val controlsHideRunnable =
+        Runnable {
+            hideControls(true)
         }
-    }
+
+    private val progressRunnable =
+        object : Runnable {
+
+            override fun run() {
+
+                try {
+
+                    if (!isFinishing && !isDestroyed) {
+
+                        updateProgress()
+
+                        controlsHandler.postDelayed(
+                            this,
+                            500L
+                        )
+                    }
+
+                } catch (e: Exception) {
+
+                    Log.e(
+                        TAG,
+                        "Progress update failed",
+                        e
+                    )
+                }
+            }
+        }
+
+    // ---------------------------------------------------------
+    // STATE
+    // ---------------------------------------------------------
 
     private var controlsVisible = true
 
     private var videoUrl = ""
+
     private var videoTitle = "Video"
+
     private var lastPosition = 0L
+
     private var wasPlaying = true
+
+    // Actual decoded video aspect ratio. Used for correct portrait/landscape
+    // rendering and for choosing the most natural fullscreen orientation.
+    private var videoAspectRatio = 16f / 9f
+
     private var userSelectedQuality = false
+
+    // ---------------------------------------------------------
+    // QUALITY MODEL
+    // ---------------------------------------------------------
 
     private data class VideoQuality(
         val height: Int,
@@ -96,47 +284,125 @@ class VideoPlayerActivity : ComponentActivity() {
         val trackIndex: Int
     )
 
-    override fun onCreate(savedInstanceState: Bundle?) {
+    // =========================================================
+    // ACTIVITY
+    // =========================================================
+
+    override fun onCreate(
+        savedInstanceState: Bundle?
+    ) {
         super.onCreate(savedInstanceState)
 
-        window.setFlags(
-            WindowManager.LayoutParams.FLAG_SECURE,
-            WindowManager.LayoutParams.FLAG_SECURE
-        )
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        try {
 
-        // Do not lock the Activity to landscape.
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            // Prevent screenshots/screen recording.
+            window.setFlags(
+                WindowManager.LayoutParams.FLAG_SECURE,
+                WindowManager.LayoutParams.FLAG_SECURE
+            )
 
-        videoUrl = intent.getStringExtra("videoUrl") ?: ""
-        videoTitle = intent.getStringExtra("title") ?: "Video"
-        lastPosition = intent.getLongExtra("lastPosition", 0L)
+            // Keep screen awake.
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+            )
 
-        createPlayerUI()
-        updateOrientationUI(resources.configuration.orientation)
-        hideSystemBars()
+            requestedOrientation =
+                ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
 
-        if (videoUrl.isBlank()) {
-            showError("Video URL is empty")
-            return
+            videoUrl =
+                intent.getStringExtra("videoUrl")
+                    ?: ""
+
+            videoTitle =
+                intent.getStringExtra("title")
+                    ?: "Video"
+
+            lastPosition =
+                intent.getLongExtra(
+                    "lastPosition",
+                    0L
+                )
+
+            createPlayerUI()
+
+            updateOrientationUI(
+                resources.configuration.orientation
+            )
+
+            hideSystemBars()
+
+            // ---------------------------------------------
+            // Validate URL
+            // ---------------------------------------------
+
+            if (videoUrl.isBlank()) {
+
+                showError(
+                    "Video URL is empty."
+                )
+
+                return
+            }
+
+            if (
+                !videoUrl.startsWith(
+                    "https://",
+                    ignoreCase = true
+                ) &&
+                !videoUrl.startsWith(
+                    "http://",
+                    ignoreCase = true
+                )
+            ) {
+
+                showError(
+                    "Invalid video URL."
+                )
+
+                return
+            }
+
+            initializePlayer()
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Activity initialization failed",
+                e
+            )
+
+            showError(
+                "Unable to open video player.\n\n" +
+                    (
+                        e.message
+                            ?: "Unknown error"
+                        )
+            )
         }
-
-        if (!videoUrl.startsWith("https://") && !videoUrl.startsWith("http://")) {
-            showError("Invalid video URL")
-            return
-        }
-
-        initializePlayer()
     }
 
-    private fun createPlayerUI() {
-        rootView = FrameLayout(this).apply {
-            setBackgroundColor(Color.BLACK)
-        }
+    // =========================================================
+    // CREATE UI
+    // =========================================================
 
-        videoContainer = FrameLayout(this).apply {
-            setBackgroundColor(Color.BLACK)
-        }
+    private fun createPlayerUI() {
+
+        rootView =
+            FrameLayout(this).apply {
+
+                setBackgroundColor(
+                    Color.BLACK
+                )
+            }
+
+        videoContainer =
+            FrameLayout(this).apply {
+
+                setBackgroundColor(
+                    Color.BLACK
+                )
+            }
 
         rootView.addView(
             videoContainer,
@@ -146,51 +412,96 @@ class VideoPlayerActivity : ComponentActivity() {
             )
         )
 
-        // Media3 1.4.1-compatible PlayerView.
-        // Do not use setControllerLayoutId(): it is not available in this
-        // Media3 version. Quality + Fullscreen are added as a bottom overlay.
-        playerView = PlayerView(this).apply {
-            // Native Media3 controls are disabled. The custom controller below
-            // owns play/pause, seek, quality, speed and fullscreen.
-            useController = false
-            keepScreenOn = true
-            resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-            setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
-            setShutterBackgroundColor(Color.BLACK)
-        }
+        // -----------------------------------------------------
+        // MEDIA3 VIDEO SURFACE
+        // -----------------------------------------------------
+        //
+        // IMPORTANT:
+        // We intentionally do NOT use Media3 PlayerView here.
+        // Zoom mobilertc can bring the legacy ExoPlayer UI classes/resources
+        // into the same APK. That can cause:
+        //
+        // com.google.android.exoplayer2.ui.AspectRatioFrameLayout
+        //       cannot be cast to
+        // androidx.media3.ui.AspectRatioFrameLayout
+        //
+        // A plain TextureView avoids the conflicting Media3 UI resource
+        // and works cleanly with the custom control overlay.
+        // Media3 ExoPlayer can render directly into a TextureView.
+        // -----------------------------------------------------
+
+        videoTextureView =
+            VideoTextureView(this).apply {
+                // The parent videoContainer supplies the black background.
+                // VideoTextureView preserves the actual video aspect ratio.
+                keepScreenOn = true
+            }
 
         videoContainer.addView(
-            playerView,
+            videoTextureView,
             FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
         )
 
-        playerView.setOnClickListener {
-            if (controlsVisible) {
-                hideControls(false)
-            } else {
-                showControls()
+        // -----------------------------------------------------
+        // PLAYER CLICK
+        // -----------------------------------------------------
+
+        videoTextureView.setOnClickListener {
+
+            try {
+
+                if (controlsVisible) {
+
+                    hideControls(false)
+
+                } else {
+
+                    showControls()
+                }
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    TAG,
+                    "Player click failed",
+                    e
+                )
             }
         }
 
-        // ---------------------------------------------------------
-        // NETFLIX-STYLE TOP BAR
-        // ---------------------------------------------------------
-        topBar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(14), dp(18), dp(18), dp(18))
-            background = GradientDrawable(
-                GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(
-                    0xF5000000.toInt(),
-                    0xA8000000.toInt(),
-                    0x00000000.toInt()
+        // -----------------------------------------------------
+        // TOP BAR
+        // -----------------------------------------------------
+
+        topBar =
+            LinearLayout(this).apply {
+
+                orientation =
+                    LinearLayout.HORIZONTAL
+
+                gravity =
+                    Gravity.CENTER_VERTICAL
+
+                setPadding(
+                    dp(14),
+                    dp(18),
+                    dp(18),
+                    dp(18)
                 )
-            )
-        }
+
+                background =
+                    GradientDrawable(
+                        GradientDrawable.Orientation.TOP_BOTTOM,
+                        intArrayOf(
+                            0xF5000000.toInt(),
+                            0xA8000000.toInt(),
+                            0x00000000.toInt()
+                        )
+                    )
+            }
 
         videoContainer.addView(
             topBar,
@@ -198,43 +509,108 @@ class VideoPlayerActivity : ComponentActivity() {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 dp(90)
             ).apply {
+
                 gravity = Gravity.TOP
             }
         )
 
-        val backButton = makeIconButton("‹", "Back", 31f).apply {
-            setOnClickListener { finish() }
-        }
+        // -----------------------------------------------------
+        // BACK BUTTON
+        // -----------------------------------------------------
+
+        val backButton =
+            makeIconButton(
+                "‹",
+                "Back",
+                31f
+            ).apply {
+
+                setOnClickListener {
+
+                    try {
+
+                        finish()
+
+                    } catch (e: Exception) {
+
+                        Log.e(
+                            TAG,
+                            "Back failed",
+                            e
+                        )
+                    }
+                }
+            }
 
         topBar.addView(
             backButton,
-            LinearLayout.LayoutParams(dp(46), dp(46))
+            LinearLayout.LayoutParams(
+                dp(46),
+                dp(46)
+            )
         )
 
-        titleView = TextView(this).apply {
-            text = videoTitle
-            textSize = 17f
-            setTextColor(Color.WHITE)
-            maxLines = 1
-            ellipsize = android.text.TextUtils.TruncateAt.END
-            gravity = Gravity.CENTER_VERTICAL
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            setPadding(dp(10), 0, dp(8), 0)
-        }
+        // -----------------------------------------------------
+        // TITLE
+        // -----------------------------------------------------
+
+        titleView =
+            TextView(this).apply {
+
+                text = videoTitle
+
+                textSize = 17f
+
+                setTextColor(
+                    Color.WHITE
+                )
+
+                maxLines = 1
+
+                ellipsize =
+                    android.text.TextUtils.TruncateAt.END
+
+                gravity =
+                    Gravity.CENTER_VERTICAL
+
+                setTypeface(
+                    typeface,
+                    android.graphics.Typeface.BOLD
+                )
+
+                setPadding(
+                    dp(10),
+                    0,
+                    dp(8),
+                    0
+                )
+            }
 
         topBar.addView(
             titleView,
-            LinearLayout.LayoutParams(0, dp(46), 1f)
+            LinearLayout.LayoutParams(
+                0,
+                dp(46),
+                1f
+            )
         )
+
+        // -----------------------------------------------------
+        // CONTROLS
+        // -----------------------------------------------------
 
         setupProfessionalControls()
 
-        // ---------------------------------------------------------
+        // -----------------------------------------------------
         // LOADING
-        // ---------------------------------------------------------
-        loadingView = ProgressBar(this).apply {
-            visibility = View.GONE
-        }
+        // -----------------------------------------------------
+
+        loadingView =
+            ProgressBar(this).apply {
+
+                visibility =
+                    View.GONE
+            }
 
         videoContainer.addView(
             loadingView,
@@ -245,13 +621,20 @@ class VideoPlayerActivity : ComponentActivity() {
             )
         )
 
-        // ---------------------------------------------------------
-        // ERROR
-        // ---------------------------------------------------------
-        errorContainer = FrameLayout(this).apply {
-            visibility = View.GONE
-            setBackgroundColor(0xFF080808.toInt())
-        }
+        // -----------------------------------------------------
+        // ERROR SCREEN
+        // -----------------------------------------------------
+
+        errorContainer =
+            FrameLayout(this).apply {
+
+                visibility =
+                    View.GONE
+
+                setBackgroundColor(
+                    0xFF080808.toInt()
+                )
+            }
 
         rootView.addView(
             errorContainer,
@@ -261,12 +644,25 @@ class VideoPlayerActivity : ComponentActivity() {
             )
         )
 
-        errorText = TextView(this).apply {
-            textSize = 17f
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            setPadding(dp(30), dp(30), dp(30), dp(30))
-        }
+        errorText =
+            TextView(this).apply {
+
+                textSize = 17f
+
+                gravity =
+                    Gravity.CENTER
+
+                setTextColor(
+                    Color.WHITE
+                )
+
+                setPadding(
+                    dp(30),
+                    dp(30),
+                    dp(30),
+                    dp(30)
+                )
+            }
 
         errorContainer.addView(
             errorText,
@@ -277,22 +673,59 @@ class VideoPlayerActivity : ComponentActivity() {
             )
         )
 
-        retryButton = Button(this).apply {
-            text = "Try again"
-            textSize = 14f
-            setTextColor(Color.WHITE)
-            isAllCaps = false
-            background = GradientDrawable().apply {
-                cornerRadius = dp(22).toFloat()
-                setColor(0xFF303030.toInt())
-            }
-            setPadding(dp(24), 0, dp(24), 0)
+        retryButton =
+            Button(this).apply {
 
-            setOnClickListener {
-                hideError()
-                initializePlayer()
+                text = "Try again"
+
+                textSize = 14f
+
+                setTextColor(
+                    Color.WHITE
+                )
+
+                isAllCaps = false
+
+                background =
+                    GradientDrawable().apply {
+
+                        cornerRadius =
+                            dp(22).toFloat()
+
+                        setColor(
+                            0xFF303030.toInt()
+                        )
+                    }
+
+                setPadding(
+                    dp(24),
+                    0,
+                    dp(24),
+                    0
+                )
+
+                setOnClickListener {
+
+                    try {
+
+                        hideError()
+
+                        initializePlayer()
+
+                    } catch (e: Exception) {
+
+                        Log.e(
+                            TAG,
+                            "Retry failed",
+                            e
+                        )
+
+                        showError(
+                            "Unable to retry video."
+                        )
+                    }
+                }
             }
-        }
 
         errorContainer.addView(
             retryButton,
@@ -301,21 +734,45 @@ class VideoPlayerActivity : ComponentActivity() {
                 dp(46),
                 Gravity.CENTER
             ).apply {
-                topMargin = dp(130)
+
+                topMargin =
+                    dp(130)
             }
         )
 
         setContentView(rootView)
 
-        rootView.viewTreeObserver.addOnGlobalLayoutListener {
-            updateVideoLayout()
-        }
+        rootView.viewTreeObserver
+            .addOnGlobalLayoutListener {
+
+                try {
+
+                    updateVideoLayout()
+
+                } catch (e: Exception) {
+
+                    Log.e(
+                        TAG,
+                        "Layout update failed",
+                        e
+                    )
+                }
+            }
     }
 
+    // =========================================================
+    // CONTROLS
+    // =========================================================
+
     private fun setupProfessionalControls() {
-        controlsOverlay = FrameLayout(this).apply {
-            setBackgroundColor(Color.TRANSPARENT)
-        }
+
+        controlsOverlay =
+            FrameLayout(this).apply {
+
+                setBackgroundColor(
+                    Color.TRANSPARENT
+                )
+            }
 
         videoContainer.addView(
             controlsOverlay,
@@ -325,30 +782,66 @@ class VideoPlayerActivity : ComponentActivity() {
             )
         )
 
-        // CENTER: rewind | play/pause | forward
-        centerControls = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-        }
+        // -----------------------------------------------------
+        // CENTER CONTROLS
+        // -----------------------------------------------------
 
-        rewindButton = makeCenterButton("↶", "Rewind 10 seconds", 31f)
-        playPauseButton = makePlayPauseButton()
-        forwardButton = makeCenterButton("↷", "Forward 10 seconds", 31f)
+        centerControls =
+            LinearLayout(this).apply {
+
+                orientation =
+                    LinearLayout.HORIZONTAL
+
+                gravity =
+                    Gravity.CENTER
+            }
+
+        rewindButton =
+            makeCenterButton(
+                "↶",
+                "Rewind 10 seconds",
+                31f
+            )
+
+        playPauseButton =
+            makePlayPauseButton()
+
+        forwardButton =
+            makeCenterButton(
+                "↷",
+                "Forward 10 seconds",
+                31f
+            )
 
         centerControls.addView(
             rewindButton,
-            LinearLayout.LayoutParams(dp(64), dp(64)).apply {
-                marginEnd = dp(38)
+            LinearLayout.LayoutParams(
+                dp(64),
+                dp(64)
+            ).apply {
+
+                marginEnd =
+                    dp(38)
             }
         )
+
         centerControls.addView(
             playPauseButton,
-            LinearLayout.LayoutParams(dp(84), dp(84))
+            LinearLayout.LayoutParams(
+                dp(84),
+                dp(84)
+            )
         )
+
         centerControls.addView(
             forwardButton,
-            LinearLayout.LayoutParams(dp(64), dp(64)).apply {
-                marginStart = dp(38)
+            LinearLayout.LayoutParams(
+                dp(64),
+                dp(64)
+            ).apply {
+
+                marginStart =
+                    dp(38)
             }
         )
 
@@ -361,70 +854,157 @@ class VideoPlayerActivity : ComponentActivity() {
             )
         )
 
-        // BOTTOM: progress + quality + speed + fullscreen
-        bottomControls = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(8), dp(18), dp(18))
-            background = GradientDrawable(
-                GradientDrawable.Orientation.BOTTOM_TOP,
-                intArrayOf(
-                    0xF2000000.toInt(),
-                    0xA0000000.toInt(),
-                    0x00000000.toInt()
+        // -----------------------------------------------------
+        // BOTTOM CONTROLS
+        // -----------------------------------------------------
+
+        bottomControls =
+            LinearLayout(this).apply {
+
+                orientation =
+                    LinearLayout.VERTICAL
+
+                setPadding(
+                    dp(18),
+                    dp(8),
+                    dp(18),
+                    dp(18)
                 )
-            )
-        }
 
-        // Progress area:
-        // [===================== SEEK BAR =====================]
-        // 0:16                                             2:16:16
-        val progressContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-        }
+                background =
+                    GradientDrawable(
+                        GradientDrawable.Orientation.BOTTOM_TOP,
+                        intArrayOf(
+                            0xF2000000.toInt(),
+                            0xA0000000.toInt(),
+                            0x00000000.toInt()
+                        )
+                    )
+            }
 
-        seekBar = SeekBar(this).apply {
-            max = 1000
-            progress = 0
-            setPadding(0, 0, 0, 0)
+        val progressContainer =
+            LinearLayout(this).apply {
 
-            setOnSeekBarChangeListener(
-                object : SeekBar.OnSeekBarChangeListener {
-                    override fun onProgressChanged(
-                        bar: SeekBar?,
-                        progress: Int,
-                        fromUser: Boolean
-                    ) {
-                        if (!fromUser) return
+                orientation =
+                    LinearLayout.VERTICAL
+            }
 
-                        val duration = getValidDuration()
-                        if (duration > 0L) {
-                            val position = duration * progress / 1000L
-                            currentTimeLabel.text = formatTime(position)
-                            totalTimeLabel.text = formatTime(duration)
+        seekBar =
+            SeekBar(this).apply {
+
+                max = 1000
+
+                progress = 0
+
+                setPadding(
+                    0,
+                    0,
+                    0,
+                    0
+                )
+
+                setOnSeekBarChangeListener(
+                    object :
+                        SeekBar.OnSeekBarChangeListener {
+
+                        override fun onProgressChanged(
+                            bar: SeekBar?,
+                            progress: Int,
+                            fromUser: Boolean
+                        ) {
+
+                            if (!fromUser) return
+
+                            try {
+
+                                val duration =
+                                    getValidDuration()
+
+                                if (duration > 0L) {
+
+                                    val position =
+                                        duration *
+                                            progress /
+                                            1000L
+
+                                    currentTimeLabel.text =
+                                        formatTime(
+                                            position
+                                        )
+
+                                    totalTimeLabel.text =
+                                        formatTime(
+                                            duration
+                                        )
+                                }
+
+                            } catch (e: Exception) {
+
+                                Log.e(
+                                    TAG,
+                                    "Seek preview failed",
+                                    e
+                                )
+                            }
+                        }
+
+                        override fun onStartTrackingTouch(
+                            bar: SeekBar?
+                        ) {
+
+                            controlsHandler
+                                .removeCallbacks(
+                                    controlsHideRunnable
+                                )
+
+                            showControls()
+                        }
+
+                        override fun onStopTrackingTouch(
+                            bar: SeekBar?
+                        ) {
+
+                            try {
+
+                                val p =
+                                    player
+                                        ?: return
+
+                                val duration =
+                                    getValidDuration()
+
+                                if (duration > 0L) {
+
+                                    val target =
+                                        duration *
+                                            seekBar.progress /
+                                            1000L
+
+                                    p.seekTo(
+                                        target
+                                    )
+                                }
+
+                                updateProgress()
+
+                                scheduleControlsHide()
+
+                            } catch (e: Exception) {
+
+                                Log.e(
+                                    TAG,
+                                    "Seek failed",
+                                    e
+                                )
+
+                                showError(
+                                    "Unable to seek video."
+                                )
+                            }
                         }
                     }
-
-                    override fun onStartTrackingTouch(bar: SeekBar?) {
-                        controlsHandler.removeCallbacks(controlsHideRunnable)
-                        showControls()
-                    }
-
-                    override fun onStopTrackingTouch(bar: SeekBar?) {
-                        val p = player ?: return
-                        val duration = getValidDuration()
-
-                        if (duration > 0L) {
-                            val target =
-                                duration * this@VideoPlayerActivity.seekBar.progress / 1000L
-                            p.seekTo(target)
-                        }
-
-                        updateProgress()
-                        scheduleControlsHide()
-                    }
-                }
-            )
-        }
+                )
+            }
 
         progressContainer.addView(
             seekBar,
@@ -434,25 +1014,54 @@ class VideoPlayerActivity : ComponentActivity() {
             )
         )
 
-        val durationRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(4), 0, dp(4), 0)
-        }
+        val durationRow =
+            LinearLayout(this).apply {
 
-        currentTimeLabel = TextView(this).apply {
-            text = "0:00"
-            textSize = 12f
-            setTextColor(0xFFE8E8E8.toInt())
-            gravity = Gravity.START or Gravity.CENTER_VERTICAL
-        }
+                orientation =
+                    LinearLayout.HORIZONTAL
 
-        totalTimeLabel = TextView(this).apply {
-            text = "0:00"
-            textSize = 12f
-            setTextColor(0xFFE8E8E8.toInt())
-            gravity = Gravity.END or Gravity.CENTER_VERTICAL
-        }
+                gravity =
+                    Gravity.CENTER_VERTICAL
+
+                setPadding(
+                    dp(4),
+                    0,
+                    dp(4),
+                    0
+                )
+            }
+
+        currentTimeLabel =
+            TextView(this).apply {
+
+                text = "0:00"
+
+                textSize = 12f
+
+                setTextColor(
+                    0xFFE8E8E8.toInt()
+                )
+
+                gravity =
+                    Gravity.START or
+                        Gravity.CENTER_VERTICAL
+            }
+
+        totalTimeLabel =
+            TextView(this).apply {
+
+                text = "0:00"
+
+                textSize = 12f
+
+                setTextColor(
+                    0xFFE8E8E8.toInt()
+                )
+
+                gravity =
+                    Gravity.END or
+                        Gravity.CENTER_VERTICAL
+            }
 
         durationRow.addView(
             currentTimeLabel,
@@ -488,34 +1097,80 @@ class VideoPlayerActivity : ComponentActivity() {
             )
         )
 
-        val actionRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
+        // -----------------------------------------------------
+        // ACTION BUTTONS
+        // -----------------------------------------------------
 
-        qualityButton = makeBottomButton("⚙  AUTO", "Video quality", 11f)
-        speedButton = makeBottomButton("1×", "Playback speed", 12f)
-        fullscreenButton = makeBottomButton("⛶", "Enter fullscreen", 21f)
+        val actionRow =
+            LinearLayout(this).apply {
+
+                orientation =
+                    LinearLayout.HORIZONTAL
+
+                gravity =
+                    Gravity.CENTER_VERTICAL
+            }
+
+        qualityButton =
+            makeBottomButton(
+                "⚙  AUTO",
+                "Video quality",
+                11f
+            )
+
+        speedButton =
+            makeBottomButton(
+                "1×",
+                "Playback speed",
+                12f
+            )
+
+        fullscreenButton =
+            makeBottomButton(
+                "⛶",
+                "Enter fullscreen",
+                21f
+            )
 
         actionRow.addView(
             qualityButton,
-            LinearLayout.LayoutParams(dp(82), dp(44)).apply {
-                marginEnd = dp(7)
+            LinearLayout.LayoutParams(
+                dp(82),
+                dp(44)
+            ).apply {
+
+                marginEnd =
+                    dp(7)
             }
         )
+
         actionRow.addView(
             speedButton,
-            LinearLayout.LayoutParams(dp(52), dp(42)).apply {
-                marginEnd = dp(7)
+            LinearLayout.LayoutParams(
+                dp(52),
+                dp(42)
+            ).apply {
+
+                marginEnd =
+                    dp(7)
             }
         )
+
         actionRow.addView(
             android.widget.Space(this),
-            LinearLayout.LayoutParams(0, dp(42), 1f)
+            LinearLayout.LayoutParams(
+                0,
+                dp(42),
+                1f
+            )
         )
+
         actionRow.addView(
             fullscreenButton,
-            LinearLayout.LayoutParams(dp(50), dp(42))
+            LinearLayout.LayoutParams(
+                dp(50),
+                dp(42)
+            )
         )
 
         bottomControls.addView(
@@ -532,177 +1187,499 @@ class VideoPlayerActivity : ComponentActivity() {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 dp(136)
             ).apply {
-                gravity = Gravity.BOTTOM
+
+                gravity =
+                    Gravity.BOTTOM
             }
         )
 
+        // -----------------------------------------------------
+        // BUTTON ACTIONS
+        // -----------------------------------------------------
+
         qualityButton.setOnClickListener {
-            showQualityDialog()
-            showControls()
+
+            try {
+
+                showQualityDialog()
+
+                showControls()
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    TAG,
+                    "Quality dialog failed",
+                    e
+                )
+
+                showError(
+                    "Unable to open video quality."
+                )
+            }
         }
 
         speedButton.setOnClickListener {
-            showSpeedDialog()
+
+            try {
+
+                showSpeedDialog()
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    TAG,
+                    "Speed dialog failed",
+                    e
+                )
+            }
         }
 
         fullscreenButton.setOnClickListener {
-            toggleOrientation()
+
+            try {
+
+                toggleOrientation()
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    TAG,
+                    "Fullscreen failed",
+                    e
+                )
+            }
         }
 
         rewindButton.setOnClickListener {
-            player?.let { p ->
-                p.seekTo(
-                    (p.currentPosition - SEEK_INCREMENT_MS)
-                        .coerceAtLeast(0L)
+
+            try {
+
+                player?.let { p ->
+
+                    p.seekTo(
+                        (
+                            p.currentPosition -
+                                SEEK_INCREMENT_MS
+                            ).coerceAtLeast(0L)
+                    )
+
+                    showControls()
+                }
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    TAG,
+                    "Rewind failed",
+                    e
                 )
-                showControls()
             }
         }
 
         forwardButton.setOnClickListener {
-            player?.let { p ->
-                val duration = p.duration
-                val target = p.currentPosition + SEEK_INCREMENT_MS
 
-                p.seekTo(
-                    if (duration > 0L) {
-                        target.coerceAtMost(duration)
-                    } else {
-                        target
-                    }
+            try {
+
+                player?.let { p ->
+
+                    val duration =
+                        p.duration
+
+                    val target =
+                        p.currentPosition +
+                            SEEK_INCREMENT_MS
+
+                    p.seekTo(
+                        if (duration > 0L) {
+
+                            target.coerceAtMost(
+                                duration
+                            )
+
+                        } else {
+
+                            target
+                        }
+                    )
+
+                    showControls()
+                }
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    TAG,
+                    "Forward failed",
+                    e
                 )
-                showControls()
             }
         }
 
         playPauseButton.setOnClickListener {
-            val p = player ?: return@setOnClickListener
 
-            if (p.isPlaying) {
-                p.pause()
-            } else {
-                p.play()
+            try {
+
+                val p =
+                    player
+                        ?: run {
+
+                            showError(
+                                "Video player is not available."
+                            )
+
+                            return@setOnClickListener
+                        }
+
+                if (p.isPlaying) {
+
+                    p.pause()
+
+                } else {
+
+                    p.play()
+                }
+
+                updatePlayPauseButton()
+
+                showControls()
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    TAG,
+                    "Play/pause failed",
+                    e
+                )
+
+                showError(
+                    "Unable to control video playback."
+                )
             }
-
-            updatePlayPauseButton()
-            showControls()
         }
 
         controlsOverlay.bringToFront()
+
         topBar.bringToFront()
 
         showControls()
     }
 
+    // =========================================================
+    // CONTROLS VISIBILITY
+    // =========================================================
+
     private fun showControls() {
-        controlsVisible = true
 
-        if (::controlsOverlay.isInitialized) {
-            controlsOverlay.animate().cancel()
-            controlsOverlay.alpha = 1f
-            controlsOverlay.visibility = View.VISIBLE
+        try {
+
+            controlsVisible = true
+
+            if (::controlsOverlay.isInitialized) {
+
+                controlsOverlay
+                    .animate()
+                    .cancel()
+
+                controlsOverlay.alpha = 1f
+
+                controlsOverlay.visibility =
+                    View.VISIBLE
+            }
+
+            if (::topBar.isInitialized) {
+
+                topBar.visibility =
+                    View.VISIBLE
+            }
+
+            updatePlayPauseButton()
+
+            scheduleControlsHide()
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Show controls failed",
+                e
+            )
         }
-
-        if (::topBar.isInitialized) {
-            topBar.visibility = View.VISIBLE
-        }
-
-        updatePlayPauseButton()
-        scheduleControlsHide()
     }
 
-    private fun hideControls(immediate: Boolean) {
-        controlsVisible = false
-        controlsHandler.removeCallbacks(controlsHideRunnable)
+    private fun hideControls(
+        immediate: Boolean
+    ) {
 
-        if (!::controlsOverlay.isInitialized) return
+        try {
 
-        if (immediate) {
-            controlsOverlay.visibility = View.GONE
-            if (::topBar.isInitialized) {
-                topBar.visibility = View.GONE
+            controlsVisible = false
+
+            controlsHandler
+                .removeCallbacks(
+                    controlsHideRunnable
+                )
+
+            if (!::controlsOverlay.isInitialized) {
+                return
             }
-            return
-        }
 
-        controlsOverlay.animate()
-            .alpha(0f)
-            .setDuration(220L)
-            .withEndAction {
-                controlsOverlay.visibility = View.GONE
-                controlsOverlay.alpha = 1f
+            if (immediate) {
+
+                controlsOverlay.visibility =
+                    View.GONE
+
                 if (::topBar.isInitialized) {
-                    topBar.visibility = View.GONE
+
+                    topBar.visibility =
+                        View.GONE
                 }
+
+                return
             }
-            .start()
+
+            controlsOverlay
+                .animate()
+                .alpha(0f)
+                .setDuration(220L)
+                .withEndAction {
+
+                    try {
+
+                        controlsOverlay.visibility =
+                            View.GONE
+
+                        controlsOverlay.alpha =
+                            1f
+
+                        if (::topBar.isInitialized) {
+
+                            topBar.visibility =
+                                View.GONE
+                        }
+
+                    } catch (e: Exception) {
+
+                        Log.e(
+                            TAG,
+                            "Hide controls end failed",
+                            e
+                        )
+                    }
+                }
+                .start()
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Hide controls failed",
+                e
+            )
+        }
     }
 
     private fun scheduleControlsHide() {
-        controlsHandler.removeCallbacks(controlsHideRunnable)
-        controlsHandler.postDelayed(
-            controlsHideRunnable,
-            4000L
-        )
+
+        try {
+
+            controlsHandler
+                .removeCallbacks(
+                    controlsHideRunnable
+                )
+
+            controlsHandler.postDelayed(
+                controlsHideRunnable,
+                CONTROL_HIDE_DELAY
+            )
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Schedule controls failed",
+                e
+            )
+        }
     }
+
+    // =========================================================
+    // PLAY / PAUSE
+    // =========================================================
 
     private fun updatePlayPauseButton() {
-        if (!::playPauseButton.isInitialized) return
 
-        val p = player ?: return
+        try {
 
-        playPauseButton.text = if (p.isPlaying) "Ⅱ" else "▶"
-        playPauseButton.contentDescription =
-            if (p.isPlaying) "Pause" else "Play"
+            if (!::playPauseButton.isInitialized) {
+                return
+            }
+
+            val p =
+                player ?: return
+
+            playPauseButton.text =
+                if (p.isPlaying) {
+
+                    "Ⅱ"
+
+                } else {
+
+                    "▶"
+                }
+
+            playPauseButton.contentDescription =
+                if (p.isPlaying) {
+
+                    "Pause"
+
+                } else {
+
+                    "Play"
+                }
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Play button update failed",
+                e
+            )
+        }
     }
 
+    // =========================================================
+    // PROGRESS
+    // =========================================================
+
     private fun updateProgress() {
-        if (!::seekBar.isInitialized ||
-            !::currentTimeLabel.isInitialized ||
-            !::totalTimeLabel.isInitialized
-        ) {
-            return
+
+        try {
+
+            if (
+                !::seekBar.isInitialized ||
+                !::currentTimeLabel.isInitialized ||
+                !::totalTimeLabel.isInitialized
+            ) {
+                return
+            }
+
+            val p =
+                player ?: return
+
+            val duration =
+                getValidDuration()
+
+            val position =
+                p.currentPosition.coerceAtLeast(
+                    0L
+                )
+
+            if (duration > 0L) {
+
+                seekBar.progress =
+                    (
+                        (
+                            position.toDouble() /
+                                duration.toDouble()
+                            ) * 1000.0
+                        )
+                        .toInt()
+                        .coerceIn(
+                            0,
+                            1000
+                        )
+
+                currentTimeLabel.text =
+                    formatTime(
+                        position.coerceAtMost(
+                            duration
+                        )
+                    )
+
+                totalTimeLabel.text =
+                    formatTime(
+                        duration
+                    )
+
+            } else {
+
+                seekBar.progress = 0
+
+                currentTimeLabel.text =
+                    formatTime(position)
+
+                totalTimeLabel.text =
+                    "0:00"
+            }
+
+            updatePlayPauseButton()
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Update progress failed",
+                e
+            )
         }
-
-        val p = player ?: return
-        val duration = getValidDuration()
-        val position = p.currentPosition.coerceAtLeast(0L)
-
-        if (duration > 0L) {
-            seekBar.progress =
-                ((position.toDouble() / duration.toDouble()) * 1000.0)
-                    .toInt()
-                    .coerceIn(0, 1000)
-
-            currentTimeLabel.text = formatTime(position.coerceAtMost(duration))
-            totalTimeLabel.text = formatTime(duration)
-        } else {
-            seekBar.progress = 0
-            currentTimeLabel.text = formatTime(position)
-            totalTimeLabel.text = "0:00"
-        }
-
-        updatePlayPauseButton()
     }
 
     private fun getValidDuration(): Long {
-        val duration = player?.duration ?: 0L
-        return if (duration == C.TIME_UNSET || duration <= 0L) {
+
+        return try {
+
+            val duration =
+                player?.duration
+                    ?: 0L
+
+            if (
+                duration ==
+                    C.TIME_UNSET ||
+                duration <= 0L
+            ) {
+
+                0L
+
+            } else {
+
+                duration
+            }
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Get duration failed",
+                e
+            )
+
             0L
-        } else {
-            duration
         }
     }
 
-    private fun formatTime(milliseconds: Long): String {
-        if (milliseconds <= 0L) return "0:00"
+    private fun formatTime(
+        milliseconds: Long
+    ): String {
 
-        val totalSeconds = milliseconds / 1000L
-        val seconds = totalSeconds % 60L
-        val minutes = (totalSeconds / 60L) % 60L
-        val hours = totalSeconds / 3600L
+        if (milliseconds <= 0L) {
+            return "0:00"
+        }
+
+        val totalSeconds =
+            milliseconds / 1000L
+
+        val seconds =
+            totalSeconds % 60L
+
+        val minutes =
+            (totalSeconds / 60L) % 60L
+
+        val hours =
+            totalSeconds / 3600L
 
         return if (hours > 0L) {
+
             String.format(
                 java.util.Locale.US,
                 "%d:%02d:%02d",
@@ -710,7 +1687,9 @@ class VideoPlayerActivity : ComponentActivity() {
                 minutes,
                 seconds
             )
+
         } else {
+
             String.format(
                 java.util.Locale.US,
                 "%d:%02d",
@@ -720,42 +1699,125 @@ class VideoPlayerActivity : ComponentActivity() {
         }
     }
 
+    // =========================================================
+    // SPEED DIALOG
+    // =========================================================
+
     private fun showSpeedDialog() {
-        val speeds = listOf(
-            0.5f,
-            0.75f,
-            1f,
-            1.25f,
-            1.5f,
-            1.75f,
-            2f
-        )
 
-        val labels = speeds.map { speed ->
-            if (speed == 1f) "1×" else "${speed}×"
-        }.toTypedArray()
+        val p =
+            player
 
-        val current =
-            player?.playbackParameters?.speed ?: 1f
+        if (p == null) {
 
-        val currentIndex =
-            speeds.indices.minByOrNull {
-                kotlin.math.abs(speeds[it] - current)
-            } ?: 2
+            showError(
+                "Video player is not available."
+            )
 
-        android.app.AlertDialog.Builder(this)
-            .setTitle("Playback speed")
-            .setSingleChoiceItems(
-                labels,
-                currentIndex
-            ) { dialog, which ->
-                player?.setPlaybackSpeed(speeds[which])
-                speedButton.text = labels[which]
-                dialog.dismiss()
-                showControls()
-            }
-            .show()
+            return
+        }
+
+        try {
+
+            val speeds =
+                listOf(
+                    0.5f,
+                    0.75f,
+                    1f,
+                    1.25f,
+                    1.5f,
+                    1.75f,
+                    2f
+                )
+
+            val labels =
+                speeds.map { speed ->
+
+                    if (speed == 1f) {
+
+                        "1×"
+
+                    } else {
+
+                        "${speed}×"
+                    }
+
+                }.toTypedArray()
+
+            val current =
+                p.playbackParameters.speed
+
+            val currentIndex =
+                speeds.indices.minByOrNull {
+
+                    kotlin.math.abs(
+                        speeds[it] -
+                            current
+                    )
+
+                } ?: 2
+
+            android.app.AlertDialog
+                .Builder(this)
+                .setTitle(
+                    "Playback speed"
+                )
+                .setSingleChoiceItems(
+                    labels,
+                    currentIndex
+                ) { dialog, which ->
+
+                    try {
+
+                        p.setPlaybackSpeed(
+                            speeds[which]
+                        )
+
+                        speedButton.text =
+                            labels[which]
+
+                        dialog.dismiss()
+
+                        showControls()
+
+                    } catch (e: Exception) {
+
+                        Log.e(
+                            TAG,
+                            "Speed change failed",
+                            e
+                        )
+
+                        dialog.dismiss()
+
+                        showError(
+                            "Unable to change playback speed."
+                        )
+                    }
+                }
+                .setNegativeButton(
+                    "Cancel",
+                    null
+                )
+                .show()
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Speed dialog failed",
+                e
+            )
+
+            showError(
+                "Unable to open playback speed."
+            )
+        }
     }
+
+    // =========================================================
+    // BUTTON HELPERS
+    // =========================================================
 
     private fun makeIconButton(
         icon: String,
@@ -763,21 +1825,48 @@ class VideoPlayerActivity : ComponentActivity() {
         size: Float
     ): Button =
         Button(this).apply {
+
             text = icon
+
             textSize = size
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-            setPadding(0, 0, 0, 0)
+
+            setTextColor(
+                Color.WHITE
+            )
+
+            gravity =
+                Gravity.CENTER
+
+            setPadding(
+                0,
+                0,
+                0,
+                0
+            )
+
             minWidth = 0
+
             minimumWidth = 0
+
             minHeight = 0
+
             minimumHeight = 0
+
             isAllCaps = false
-            contentDescription = description
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(0x42000000.toInt())
-            }
+
+            contentDescription =
+                description
+
+            background =
+                GradientDrawable().apply {
+
+                    shape =
+                        GradientDrawable.OVAL
+
+                    setColor(
+                        0x42000000.toInt()
+                    )
+                }
         }
 
     private fun makeCenterButton(
@@ -786,43 +1875,106 @@ class VideoPlayerActivity : ComponentActivity() {
         size: Float
     ): Button =
         Button(this).apply {
+
             text = icon
+
             textSize = size
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-            setPadding(0, 0, 0, 0)
+
+            setTextColor(
+                Color.WHITE
+            )
+
+            gravity =
+                Gravity.CENTER
+
+            setPadding(
+                0,
+                0,
+                0,
+                0
+            )
+
             minWidth = 0
+
             minimumWidth = 0
+
             minHeight = 0
+
             minimumHeight = 0
+
             isAllCaps = false
-            contentDescription = description
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(0x52000000.toInt())
-            }
-            elevation = dp(4).toFloat()
+
+            contentDescription =
+                description
+
+            background =
+                GradientDrawable().apply {
+
+                    shape =
+                        GradientDrawable.OVAL
+
+                    setColor(
+                        0x52000000.toInt()
+                    )
+                }
+
+            elevation =
+                dp(4).toFloat()
         }
 
-    private fun makePlayPauseButton(): Button =
+    private fun makePlayPauseButton():
+        Button =
         Button(this).apply {
+
             text = "▶"
+
             textSize = 31f
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-            setPadding(dp(3), 0, 0, 0)
+
+            setTextColor(
+                Color.WHITE
+            )
+
+            gravity =
+                Gravity.CENTER
+
+            setPadding(
+                dp(3),
+                0,
+                0,
+                0
+            )
+
             minWidth = 0
+
             minimumWidth = 0
+
             minHeight = 0
+
             minimumHeight = 0
+
             isAllCaps = false
-            contentDescription = "Play"
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(0xD0000000.toInt())
-                setStroke(dp(1), 0x45FFFFFF.toInt())
-            }
-            elevation = dp(8).toFloat()
+
+            contentDescription =
+                "Play"
+
+            background =
+                GradientDrawable().apply {
+
+                    shape =
+                        GradientDrawable.OVAL
+
+                    setColor(
+                        0xD0000000.toInt()
+                    )
+
+                    setStroke(
+                        dp(1),
+                        0x45FFFFFF.toInt()
+                    )
+                }
+
+            elevation =
+                dp(8).toFloat()
         }
 
     private fun makeBottomButton(
@@ -831,664 +1983,1919 @@ class VideoPlayerActivity : ComponentActivity() {
         textSizeSp: Float
     ): Button =
         Button(this).apply {
+
             text = textValue
+
             textSize = textSizeSp
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-            setPadding(0, 0, 0, 0)
+
+            setTextColor(
+                Color.WHITE
+            )
+
+            gravity =
+                Gravity.CENTER
+
+            setPadding(
+                0,
+                0,
+                0,
+                0
+            )
+
             minWidth = 0
+
             minimumWidth = 0
+
             minHeight = 0
+
             minimumHeight = 0
+
             isAllCaps = false
-            contentDescription = description
-            background = GradientDrawable().apply {
-                cornerRadius = dp(20).toFloat()
-                setColor(0x4A000000.toInt())
-                setStroke(dp(1), 0x24FFFFFF.toInt())
-            }
+
+            contentDescription =
+                description
+
+            background =
+                GradientDrawable().apply {
+
+                    cornerRadius =
+                        dp(20).toFloat()
+
+                    setColor(
+                        0x4A000000.toInt()
+                    )
+
+                    setStroke(
+                        dp(1),
+                        0x24FFFFFF.toInt()
+                    )
+                }
         }
 
+    // =========================================================
+    // LAYOUT
+    // =========================================================
+
     private fun updateVideoLayout() {
-        if (!::videoContainer.isInitialized) return
 
-        // The container fills the complete screen. PlayerView FIT centers the
-        // entire video in portrait and landscape without cropping.
-        val lp =
-            videoContainer.layoutParams
-                as FrameLayout.LayoutParams
+        try {
 
-        lp.width = FrameLayout.LayoutParams.MATCH_PARENT
-        lp.height = FrameLayout.LayoutParams.MATCH_PARENT
-        lp.gravity = Gravity.CENTER
+            if (!::videoContainer.isInitialized) {
+                return
+            }
 
-        videoContainer.layoutParams = lp
+            val lp =
+                videoContainer.layoutParams
+                    as FrameLayout.LayoutParams
 
-        updateOrientationUI(
-            resources.configuration.orientation
-        )
+            lp.width =
+                FrameLayout.LayoutParams.MATCH_PARENT
+
+            lp.height =
+                FrameLayout.LayoutParams.MATCH_PARENT
+
+            lp.gravity =
+                Gravity.CENTER
+
+            videoContainer.layoutParams =
+                lp
+
+            updateOrientationUI(
+                resources.configuration.orientation
+            )
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Video layout update failed",
+                e
+            )
+        }
     }
 
-    private fun updateOrientationUI(orientation: Int) {
-        if (!::fullscreenButton.isInitialized) return
+    private fun updateOrientationUI(
+        orientation: Int
+    ) {
 
-        val landscape =
-            orientation == Configuration.ORIENTATION_LANDSCAPE
+        try {
 
-        fullscreenButton.text = "⛶"
-        fullscreenButton.contentDescription =
-            if (landscape) "Exit fullscreen"
-            else "Enter fullscreen"
+            if (!::fullscreenButton.isInitialized) {
+                return
+            }
+
+            val landscape =
+                orientation ==
+                    Configuration.ORIENTATION_LANDSCAPE
+
+            fullscreenButton.text =
+                "⛶"
+
+            fullscreenButton.contentDescription =
+                if (landscape) {
+
+                    "Exit fullscreen"
+
+                } else {
+
+                    "Enter fullscreen"
+                }
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Orientation UI failed",
+                e
+            )
+        }
     }
 
     private fun toggleOrientation() {
-        val isLandscape =
-            resources.configuration.orientation ==
-                Configuration.ORIENTATION_LANDSCAPE
-
-        requestedOrientation =
-            if (isLandscape) {
-                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-            } else {
-                ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-            }
-
-        hideSystemBars()
-        showControls()
-    }
-
-    private fun initializePlayer() {
-        showLoading()
-        controlsHandler.removeCallbacks(progressRunnable)
-
-        if (::playerView.isInitialized) {
-            playerView.player = null
-        }
-
-        player?.release()
-        player = null
 
         try {
+
+            val isLandscape =
+                resources.configuration.orientation ==
+                    Configuration.ORIENTATION_LANDSCAPE
+
+            requestedOrientation =
+                if (isLandscape) {
+
+                    ActivityInfo
+                        .SCREEN_ORIENTATION_PORTRAIT
+
+                } else if (
+                    videoAspectRatio < 1f
+                ) {
+                    // Portrait video: keep fullscreen portrait so the
+                    // original vertical composition is not cropped.
+                    ActivityInfo
+                        .SCREEN_ORIENTATION_PORTRAIT
+
+                } else {
+
+                    // Landscape video: use immersive landscape fullscreen.
+                    ActivityInfo
+                        .SCREEN_ORIENTATION_LANDSCAPE
+                }
+
+            hideSystemBars()
+
+            showControls()
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Toggle orientation failed",
+                e
+            )
+
+            showError(
+                "Unable to change screen orientation."
+            )
+        }
+    }
+
+    // =========================================================
+    // INITIALIZE PLAYER
+    // =========================================================
+
+    private fun initializePlayer() {
+
+        if (isFinishing || isDestroyed) {
+            return
+        }
+
+        showLoading()
+
+        hideError()
+
+        controlsHandler
+            .removeCallbacks(
+                progressRunnable
+            )
+
+        try {
+
+            // Detach old video surface from player.
+            if (::videoTextureView.isInitialized) {
+                player?.clearVideoTextureView(videoTextureView)
+            }
+
+            // Release old player.
+            player?.release()
+
+            player = null
+
+            // -------------------------------------------------
+            // HTTP
+            // -------------------------------------------------
+
             val httpDataSourceFactory =
                 DefaultHttpDataSource.Factory()
                     .setUserAgent(
-                        "Mozilla/5.0 (Linux; Android) AppleWebKit/537.36 " +
-                            "(KHTML, like Gecko) Chrome/120.0.0.0 " +
+                        "Mozilla/5.0 (Linux; Android) " +
+                            "AppleWebKit/537.36 " +
+                            "(KHTML, like Gecko) " +
+                            "Chrome/120.0.0.0 " +
                             "Mobile Safari/537.36"
                     )
-                    .setAllowCrossProtocolRedirects(true)
-                    .setConnectTimeoutMs(30_000)
-                    .setReadTimeoutMs(30_000)
+                    .setAllowCrossProtocolRedirects(
+                        true
+                    )
+                    .setConnectTimeoutMs(
+                        CONNECTION_TIMEOUT
+                    )
+                    .setReadTimeoutMs(
+                        READ_TIMEOUT
+                    )
+
+            // -------------------------------------------------
+            // MEDIA SOURCE
+            // -------------------------------------------------
 
             val mediaSourceFactory =
-                DefaultMediaSourceFactory(httpDataSourceFactory)
+                DefaultMediaSourceFactory(
+                    httpDataSourceFactory
+                )
 
-            player = ExoPlayer.Builder(this)
-                .setMediaSourceFactory(mediaSourceFactory)
-                .build()
+            // -------------------------------------------------
+            // PLAYER
+            // -------------------------------------------------
 
-            playerView.player = player
+            val newPlayer =
+                ExoPlayer.Builder(this)
+                    .setMediaSourceFactory(
+                        mediaSourceFactory
+                    )
+                    .build()
 
-            player?.addListener(
+            player =
+                newPlayer
+
+            // Attach Media3 player directly to TextureView.
+            newPlayer.setVideoTextureView(videoTextureView)
+
+            // -------------------------------------------------
+            // LISTENER
+            // -------------------------------------------------
+
+            newPlayer.addListener(
                 object : Player.Listener {
 
-                    override fun onPlaybackStateChanged(state: Int) {
-                        when (state) {
-                            Player.STATE_BUFFERING -> showLoading()
+                    override fun onPlaybackStateChanged(
+                        state: Int
+                    ) {
 
-                            Player.STATE_READY -> {
-                                hideLoading()
+                        try {
 
-                                // Duration is reliable after STATE_READY.
-                                updateProgress()
-                                controlsHandler.removeCallbacks(progressRunnable)
-                                controlsHandler.post(progressRunnable)
+                            when (state) {
 
-                                printVideoTracks(
-                                    player?.currentTracks ?: return
-                                )
-                                updateQualityButton()
+                                Player.STATE_BUFFERING -> {
 
-                                // HLS adaptive variants can be populated immediately
-                                // after READY. Refresh once more shortly afterwards.
-                                controlsHandler.postDelayed(
-                                    {
-                                        if (!isFinishing && !isDestroyed) {
-                                            updateQualityButton()
-                                        }
-                                    },
-                                    500L
-                                )
+                                    showLoading()
+                                }
+
+                                Player.STATE_READY -> {
+
+                                    hideLoading()
+
+                                    updateProgress()
+
+                                    controlsHandler
+                                        .removeCallbacks(
+                                            progressRunnable
+                                        )
+
+                                    controlsHandler.post(
+                                        progressRunnable
+                                    )
+
+                                    printVideoTracks(
+                                        newPlayer.currentTracks
+                                    )
+
+                                    updateQualityButton()
+
+                                    controlsHandler
+                                        .postDelayed({
+
+                                            if (
+                                                !isFinishing &&
+                                                !isDestroyed
+                                            ) {
+
+                                                updateQualityButton()
+                                            }
+
+                                        }, 500L)
+                                }
+
+                                Player.STATE_ENDED -> {
+
+                                    hideLoading()
+
+                                    updateProgress()
+                                }
+
+                                Player.STATE_IDLE -> {
+                                    // Nothing.
+                                }
                             }
 
-                            Player.STATE_ENDED -> {
-                                hideLoading()
-                            }
+                        } catch (e: Exception) {
+
+                            Log.e(
+                                TAG,
+                                "Playback state error",
+                                e
+                            )
                         }
                     }
 
-                    override fun onIsPlayingChanged(isPlaying: Boolean) {
-                        wasPlaying = isPlaying
-                        updatePlayPauseButton()
+                    override fun onIsPlayingChanged(
+                        isPlaying: Boolean
+                    ) {
+
+                        try {
+
+                            wasPlaying =
+                                isPlaying
+
+                            updatePlayPauseButton()
+
+                        } catch (e: Exception) {
+
+                            Log.e(
+                                TAG,
+                                "Playing state error",
+                                e
+                            )
+                        }
                     }
 
-                    override fun onTracksChanged(tracks: Tracks) {
-                        printVideoTracks(tracks)
-                        updateQualityButton()
+                    override fun onTracksChanged(
+                        tracks: Tracks
+                    ) {
 
-                        controlsHandler.postDelayed(
-                            {
-                                if (!isFinishing && !isDestroyed) {
-                                    updateQualityButton()
+                        try {
+
+                            printVideoTracks(
+                                tracks
+                            )
+
+                            updateQualityButton()
+
+                            controlsHandler
+                                .postDelayed({
+
+                                    if (
+                                        !isFinishing &&
+                                        !isDestroyed
+                                    ) {
+
+                                        updateQualityButton()
+                                    }
+
+                                }, 300L)
+
+                        } catch (e: Exception) {
+
+                            Log.e(
+                                TAG,
+                                "Track change error",
+                                e
+                            )
+                        }
+                    }
+
+                    override fun onVideoSizeChanged(
+                        videoSize: VideoSize
+                    ) {
+
+                        try {
+
+                            videoAspectRatio =
+                                if (
+                                    videoSize.width > 0 &&
+                                    videoSize.height > 0
+                                ) {
+                                    (
+                                        videoSize.width.toFloat() *
+                                            videoSize.pixelWidthHeightRatio
+                                        ) /
+                                            videoSize.height.toFloat()
+                                } else {
+                                    16f / 9f
                                 }
-                            },
-                            300L
-                        )
+
+                            if (
+                                videoSize.unappliedRotationDegrees == 90 ||
+                                videoSize.unappliedRotationDegrees == 270
+                            ) {
+                                videoAspectRatio =
+                                    1f / videoAspectRatio
+                            }
+
+                            if (
+                                videoAspectRatio.isFinite() &&
+                                videoAspectRatio > 0f
+                            ) {
+                                videoTextureView.setVideoAspectRatio(
+                                    videoSize.width,
+                                    videoSize.height,
+                                    videoSize.pixelWidthHeightRatio,
+                                    videoSize.unappliedRotationDegrees
+                                )
+                            }
+
+                            Log.d(
+                                TAG,
+                                "VIDEO SIZE = ${videoSize.width}x${videoSize.height}, " +
+                                    "pixelRatio=${videoSize.pixelWidthHeightRatio}, " +
+                                    "rotation=${videoSize.unappliedRotationDegrees}, " +
+                                    "aspect=$videoAspectRatio"
+                            )
+
+                        } catch (e: Exception) {
+
+                            Log.e(
+                                TAG,
+                                "Video size update failed",
+                                e
+                            )
+                        }
                     }
 
                     override fun onTimelineChanged(
-                        timeline: androidx.media3.common.Timeline,
+                        timeline:
+                            androidx.media3.common.Timeline,
                         reason: Int
                     ) {
-                        updateProgress()
+
+                        try {
+
+                            updateProgress()
+
+                        } catch (e: Exception) {
+
+                            Log.e(
+                                TAG,
+                                "Timeline error",
+                                e
+                            )
+                        }
                     }
 
                     override fun onPlayerError(
                         error: PlaybackException
                     ) {
-                        Log.e(TAG, "VIDEO PLAYBACK ERROR", error)
+
+                        Log.e(
+                            TAG,
+                            "VIDEO PLAYBACK ERROR",
+                            error
+                        )
+
                         hideLoading()
-                        showError(getReadableError(error))
+
+                        showError(
+                            getReadableError(
+                                error
+                            )
+                        )
                     }
                 }
             )
 
-            val builder =
+            // -------------------------------------------------
+            // MEDIA ITEM
+            // -------------------------------------------------
+
+            val mediaItemBuilder =
                 MediaItem.Builder()
-                    .setUri(Uri.parse(videoUrl))
+                    .setUri(
+                        Uri.parse(videoUrl)
+                    )
 
-            if (videoUrl.lowercase().contains(".m3u8")) {
-                builder.setMimeType(MimeTypes.APPLICATION_M3U8)
+            // HLS.
+            if (
+                videoUrl
+                    .substringBefore("?")
+                    .lowercase()
+                    .endsWith(".m3u8")
+            ) {
+
+                mediaItemBuilder
+                    .setMimeType(
+                        MimeTypes.APPLICATION_M3U8
+                    )
             }
 
-            player?.setMediaItem(builder.build())
-            player?.prepare()
+            val mediaItem =
+                mediaItemBuilder.build()
 
-            if (lastPosition > 0) {
-                player?.seekTo(lastPosition)
+            // -------------------------------------------------
+            // PREPARE
+            // -------------------------------------------------
+
+            newPlayer.setMediaItem(
+                mediaItem
+            )
+
+            newPlayer.prepare()
+
+            // -------------------------------------------------
+            // RESUME
+            // -------------------------------------------------
+
+            if (lastPosition > 0L) {
+
+                newPlayer.seekTo(
+                    lastPosition
+                )
             }
 
-            player?.playWhenReady = true
+            newPlayer.playWhenReady =
+                true
 
             updatePlayPauseButton()
+
             showControls()
 
-            Log.d(TAG, "Player initialized: $videoUrl")
+            Log.d(
+                TAG,
+                "Player initialized: $videoUrl"
+            )
 
         } catch (e: Exception) {
-            Log.e(TAG, "Player initialization failed", e)
-            showError("Unable to initialize video player")
-        }
-    }
 
-    private fun printVideoTracks(tracks: Tracks) {
-        var count = 0
+            Log.e(
+                TAG,
+                "Player initialization failed",
+                e
+            )
 
-        for (group in tracks.groups) {
-            if (group.type != C.TRACK_TYPE_VIDEO) continue
+            player?.release()
 
-            for (i in 0 until group.mediaTrackGroup.length) {
-                val f = group.mediaTrackGroup.getFormat(i)
+            player = null
 
-                Log.d(
-                    TAG,
-                    "VIDEO TRACK[$count]: " +
-                        "${f.width}x${f.height}, " +
-                        "bitrate=${f.bitrate}, index=$i"
-                )
+            if (
+                !isFinishing &&
+                !isDestroyed
+            ) {
 
-                count++
-            }
-        }
-
-        Log.d(TAG, "TOTAL VIDEO TRACKS = $count")
-    }
-
-    private fun getVideoQualities(): List<VideoQuality> {
-        val p = player ?: return emptyList()
-        val result = mutableListOf<VideoQuality>()
-
-        for (group in p.currentTracks.groups) {
-            if (group.type != C.TRACK_TYPE_VIDEO) continue
-
-            val trackGroup = group.mediaTrackGroup
-
-            for (i in 0 until trackGroup.length) {
-                val f = trackGroup.getFormat(i)
-
-                // Ignore entries that do not contain a usable resolution.
-                if (f.height <= 0 || f.width <= 0) continue
-
-                result += VideoQuality(
-                    height = f.height,
-                    width = f.width,
-                    bitrate = f.bitrate,
-                    group = group,
-                    trackIndex = i
+                showError(
+                    "Unable to initialize video player.\n\n" +
+                        (
+                            e.message
+                                ?: "Unknown error"
+                            )
                 )
             }
         }
-
-        // One entry per resolution. If the stream contains multiple tracks
-        // for the same height, keep the highest bitrate version.
-        return result
-            .groupBy { it.height }
-            .values
-            .mapNotNull { list ->
-                list.maxByOrNull { it.bitrate }
-            }
-            .sortedByDescending { it.height }
     }
 
-    private fun showQualityDialog() {
-        val qualities = getVideoQualities()
+    // =========================================================
+    // TRACKS
+    // =========================================================
 
-        Log.d(TAG, "QUALITY OPTIONS = ${qualities.size}")
-
-        val dialog = android.app.Dialog(this)
-
-        val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(
-                dp(22),
-                dp(18),
-                dp(22),
-                dp(18)
-            )
-
-            background = GradientDrawable().apply {
-                cornerRadius = dp(18).toFloat()
-                setColor(0xFF171717.toInt())
-            }
-        }
-
-        val title = TextView(this).apply {
-            text = "Video quality"
-            textSize = 20f
-            setTextColor(Color.WHITE)
-            setTypeface(
-                typeface,
-                android.graphics.Typeface.BOLD
-            )
-            setPadding(0, 0, 0, dp(2))
-        }
-
-        box.addView(title)
-
-        val subtitle = TextView(this).apply {
-            text = "Choose the playback resolution"
-            textSize = 13f
-            setTextColor(0xFFAAAAAA.toInt())
-            setPadding(0, 0, 0, dp(14))
-        }
-
-        box.addView(subtitle)
-
-        val auto = dialogButton(
-            if (!userSelectedQuality) "✓  Auto" else "Auto"
-        )
-
-        auto.setOnClickListener {
-            setAutoQuality()
-            dialog.dismiss()
-        }
-
-        box.addView(auto)
-
-        if (qualities.isEmpty()) {
-            val unavailable = TextView(this).apply {
-                text = "This video provides no additional resolution variants."
-                textSize = 13f
-                setTextColor(0xFFAAAAAA.toInt())
-                setPadding(dp(12), dp(8), dp(12), dp(12))
-            }
-            box.addView(unavailable)
-        }
-
-        qualities.forEach { quality ->
-
-            val label =
-                if (quality.bitrate > 0) {
-                    "${quality.height}p   ${formatBitrate(quality.bitrate)}"
-                } else {
-                    "${quality.height}p"
-                }
-
-            val selected = userSelectedQuality &&
-                qualityButton.text.toString().contains("${quality.height}p")
-
-            val button = dialogButton(
-                if (selected) "✓  $label" else label
-            )
-
-            button.setOnClickListener {
-                setVideoQuality(quality)
-                dialog.dismiss()
-            }
-
-            box.addView(button)
-        }
-
-        dialog.setContentView(box)
-        dialog.setCanceledOnTouchOutside(true)
-        dialog.show()
-
-        dialog.window?.setBackgroundDrawableResource(
-            android.R.color.transparent
-        )
-
-        val width = minOf(
-            dp(360),
-            (resources.displayMetrics.widthPixels * 0.88f).toInt()
-        )
-
-        dialog.window?.setLayout(
-            width,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        )
-    }
-
-    private fun dialogButton(textValue: String): Button =
-        Button(this).apply {
-            text = textValue
-            textSize = 15f
-            setTextColor(Color.WHITE)
-            gravity = Gravity.START or Gravity.CENTER_VERTICAL
-            setPadding(dp(12), 0, dp(12), 0)
-
-            background = GradientDrawable().apply {
-                cornerRadius = dp(12).toFloat()
-                setColor(0xFF242424.toInt())
-                setStroke(dp(1), 0x18FFFFFF.toInt())
-            }
-
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                dp(48)
-            ).apply {
-                bottomMargin = dp(7)
-            }
-        }
-
-    private fun setAutoQuality() {
-        val p = player ?: return
+    private fun printVideoTracks(
+        tracks: Tracks
+    ) {
 
         try {
+
+            var count = 0
+
+            for (group in tracks.groups) {
+
+                if (
+                    group.type !=
+                        C.TRACK_TYPE_VIDEO
+                ) {
+                    continue
+                }
+
+                for (
+                    i in 0 until
+                        group.mediaTrackGroup.length
+                ) {
+
+                    val format =
+                        group.mediaTrackGroup
+                            .getFormat(i)
+
+                    Log.d(
+                        TAG,
+                        "VIDEO TRACK[$count]: " +
+                            "${format.width}x" +
+                            "${format.height}, " +
+                            "bitrate=${format.bitrate}, " +
+                            "index=$i"
+                    )
+
+                    count++
+                }
+            }
+
+            Log.d(
+                TAG,
+                "TOTAL VIDEO TRACKS = $count"
+            )
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Print tracks failed",
+                e
+            )
+        }
+    }
+
+    private fun getVideoQualities():
+        List<VideoQuality> {
+
+        val p =
+            player ?: return emptyList()
+
+        val result =
+            mutableListOf<VideoQuality>()
+
+        try {
+
+            for (
+                group in
+                    p.currentTracks.groups
+            ) {
+
+                if (
+                    group.type !=
+                        C.TRACK_TYPE_VIDEO
+                ) {
+                    continue
+                }
+
+                val trackGroup =
+                    group.mediaTrackGroup
+
+                for (
+                    i in 0 until
+                        trackGroup.length
+                ) {
+
+                    val format =
+                        trackGroup.getFormat(i)
+
+                    if (
+                        format.height <= 0 ||
+                        format.width <= 0
+                    ) {
+                        continue
+                    }
+
+                    result +=
+                        VideoQuality(
+                            height =
+                                format.height,
+                            width =
+                                format.width,
+                            bitrate =
+                                format.bitrate,
+                            group =
+                                group,
+                            trackIndex =
+                                i
+                        )
+                }
+            }
+
+            return result
+                .groupBy {
+                    it.height
+                }
+                .values
+                .mapNotNull {
+                    list ->
+                    list.maxByOrNull {
+                        it.bitrate
+                    }
+                }
+                .sortedByDescending {
+                    it.height
+                }
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Get video qualities failed",
+                e
+            )
+
+            return emptyList()
+        }
+    }
+
+    // =========================================================
+    // QUALITY DIALOG
+    // =========================================================
+
+    private fun showQualityDialog() {
+
+        if (
+            player == null ||
+            isFinishing ||
+            isDestroyed
+        ) {
+
+            showError(
+                "Video player is not available."
+            )
+
+            return
+        }
+
+        try {
+
+            val qualities =
+                getVideoQualities()
+
+            val dialog =
+                android.app.Dialog(this)
+
+            val box =
+                LinearLayout(this).apply {
+
+                    orientation =
+                        LinearLayout.VERTICAL
+
+                    setPadding(
+                        dp(22),
+                        dp(18),
+                        dp(22),
+                        dp(18)
+                    )
+
+                    background =
+                        GradientDrawable().apply {
+
+                            cornerRadius =
+                                dp(18).toFloat()
+
+                            setColor(
+                                0xFF171717.toInt()
+                            )
+                        }
+                }
+
+            val title =
+                TextView(this).apply {
+
+                    text =
+                        "Video quality"
+
+                    textSize = 20f
+
+                    setTextColor(
+                        Color.WHITE
+                    )
+
+                    setTypeface(
+                        typeface,
+                        android.graphics.Typeface.BOLD
+                    )
+
+                    setPadding(
+                        0,
+                        0,
+                        0,
+                        dp(2)
+                    )
+                }
+
+            box.addView(title)
+
+            val subtitle =
+                TextView(this).apply {
+
+                    text =
+                        "Choose the playback resolution"
+
+                    textSize = 13f
+
+                    setTextColor(
+                        0xFFAAAAAA.toInt()
+                    )
+
+                    setPadding(
+                        0,
+                        0,
+                        0,
+                        dp(14)
+                    )
+                }
+
+            box.addView(subtitle)
+
+            val auto =
+                dialogButton(
+                    if (!userSelectedQuality) {
+
+                        "✓  Auto"
+
+                    } else {
+
+                        "Auto"
+                    }
+                )
+
+            auto.setOnClickListener {
+
+                try {
+
+                    setAutoQuality()
+
+                    dialog.dismiss()
+
+                } catch (e: Exception) {
+
+                    Log.e(
+                        TAG,
+                        "Auto quality failed",
+                        e
+                    )
+
+                    dialog.dismiss()
+
+                    showError(
+                        "Unable to change quality."
+                    )
+                }
+            }
+
+            box.addView(auto)
+
+            if (qualities.isEmpty()) {
+
+                val unavailable =
+                    TextView(this).apply {
+
+                        text =
+                            "This video provides no additional resolution variants."
+
+                        textSize = 13f
+
+                        setTextColor(
+                            0xFFAAAAAA.toInt()
+                        )
+
+                        setPadding(
+                            dp(12),
+                            dp(8),
+                            dp(12),
+                            dp(12)
+                        )
+                    }
+
+                box.addView(
+                    unavailable
+                )
+            }
+
+            qualities.forEach { quality ->
+
+                val label =
+                    if (
+                        quality.bitrate > 0
+                    ) {
+
+                        "${quality.height}p   " +
+                            "${formatBitrate(
+                                quality.bitrate
+                            )}"
+
+                    } else {
+
+                        "${quality.height}p"
+                    }
+
+                val selected =
+                    userSelectedQuality &&
+                        qualityButton
+                            .text
+                            .toString()
+                            .contains(
+                                "${quality.height}p"
+                            )
+
+                val button =
+                    dialogButton(
+                        if (selected) {
+
+                            "✓  $label"
+
+                        } else {
+
+                            label
+                        }
+                    )
+
+                button.setOnClickListener {
+
+                    try {
+
+                        setVideoQuality(
+                            quality
+                        )
+
+                        dialog.dismiss()
+
+                    } catch (e: Exception) {
+
+                        Log.e(
+                            TAG,
+                            "Quality selection failed",
+                            e
+                        )
+
+                        dialog.dismiss()
+
+                        showError(
+                            "Unable to change video quality."
+                        )
+                    }
+                }
+
+                box.addView(button)
+            }
+
+            dialog.setContentView(box)
+
+            dialog.setCanceledOnTouchOutside(
+                true
+            )
+
+            dialog.setOnDismissListener {
+                showControls()
+            }
+
+            dialog.show()
+
+            dialog.window
+                ?.setBackgroundDrawableResource(
+                    android.R.color.transparent
+                )
+
+            val width =
+                minOf(
+                    dp(360),
+                    (
+                        resources.displayMetrics
+                            .widthPixels *
+                            0.88f
+                        ).toInt()
+                )
+
+            dialog.window?.setLayout(
+                width,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Quality dialog failed",
+                e
+            )
+
+            showError(
+                "Unable to open video quality."
+            )
+        }
+    }
+
+    // =========================================================
+    // DIALOG BUTTON
+    // =========================================================
+
+    private fun dialogButton(
+        textValue: String
+    ): Button =
+        Button(this).apply {
+
+            text =
+                textValue
+
+            textSize = 15f
+
+            setTextColor(
+                Color.WHITE
+            )
+
+            gravity =
+                Gravity.START or
+                    Gravity.CENTER_VERTICAL
+
+            setPadding(
+                dp(12),
+                0,
+                dp(12),
+                0
+            )
+
+            background =
+                GradientDrawable().apply {
+
+                    cornerRadius =
+                        dp(12).toFloat()
+
+                    setColor(
+                        0xFF242424.toInt()
+                    )
+
+                    setStroke(
+                        dp(1),
+                        0x18FFFFFF.toInt()
+                    )
+                }
+
+            layoutParams =
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    dp(48)
+                ).apply {
+
+                    bottomMargin =
+                        dp(7)
+                }
+        }
+
+    // =========================================================
+    // AUTO QUALITY
+    // =========================================================
+
+    private fun setAutoQuality() {
+
+        val p =
+            player ?: run {
+
+                showError(
+                    "Video player is not available."
+                )
+
+                return
+            }
+
+        try {
+
             val params =
                 p.trackSelectionParameters
                     .buildUpon()
-                    .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+                    .clearOverridesOfType(
+                        C.TRACK_TYPE_VIDEO
+                    )
                     .clearVideoSizeConstraints()
-                    .setForceHighestSupportedBitrate(false)
+                    .setForceHighestSupportedBitrate(
+                        false
+                    )
                     .build()
 
-            p.trackSelectionParameters = params
+            p.trackSelectionParameters =
+                params
 
-            userSelectedQuality = false
-            qualityButton.text = "⚙  AUTO"
+            userSelectedQuality =
+                false
 
-            Log.d(TAG, "QUALITY = AUTO")
+            qualityButton.text =
+                "⚙  AUTO"
+
+            Log.d(
+                TAG,
+                "QUALITY = AUTO"
+            )
 
         } catch (e: Exception) {
-            Log.e(TAG, "Auto quality failed", e)
+
+            Log.e(
+                TAG,
+                "Auto quality failed",
+                e
+            )
+
+            showError(
+                "Unable to change video quality."
+            )
         }
     }
 
-    private fun setVideoQuality(q: VideoQuality) {
-        val p = player ?: return
+    // =========================================================
+    // MANUAL QUALITY
+    // =========================================================
+
+    private fun setVideoQuality(
+        q: VideoQuality
+    ) {
+
+        val p =
+            player ?: run {
+
+                showError(
+                    "Video player is not available."
+                )
+
+                return
+            }
 
         try {
-            val position = p.currentPosition
-            val playing = p.isPlaying
+
+            val position =
+                p.currentPosition
+
+            val playing =
+                p.isPlaying
 
             val override =
                 TrackSelectionOverride(
                     q.group.mediaTrackGroup,
-                    listOf(q.trackIndex)
+                    listOf(
+                        q.trackIndex
+                    )
                 )
 
             val params =
                 p.trackSelectionParameters
                     .buildUpon()
-                    .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+                    .clearOverridesOfType(
+                        C.TRACK_TYPE_VIDEO
+                    )
                     .clearVideoSizeConstraints()
-                    .setForceHighestSupportedBitrate(false)
-                    .addOverride(override)
+                    .setForceHighestSupportedBitrate(
+                        false
+                    )
+                    .addOverride(
+                        override
+                    )
                     .build()
 
-            p.trackSelectionParameters = params
+            p.trackSelectionParameters =
+                params
 
-            if (position > 0) {
-                p.seekTo(position)
+            if (position > 0L) {
+
+                p.seekTo(
+                    position
+                )
             }
 
-            p.playWhenReady = playing
+            p.playWhenReady =
+                playing
 
-            userSelectedQuality = true
-            qualityButton.text = "⚙  ${q.height}p"
+            userSelectedQuality =
+                true
+
+            qualityButton.text =
+                "⚙  ${q.height}p"
 
             Log.d(
                 TAG,
                 "QUALITY SELECTED = " +
-                    "${q.width}x${q.height}, " +
+                    "${q.width}x" +
+                    "${q.height}, " +
                     "bitrate=${q.bitrate}, " +
                     "track=${q.trackIndex}"
             )
 
         } catch (e: Exception) {
-            Log.e(TAG, "Manual quality failed", e)
 
-            Toast.makeText(
-                this,
-                "Unable to change quality",
-                Toast.LENGTH_SHORT
-            ).show()
+            Log.e(
+                TAG,
+                "Manual quality failed",
+                e
+            )
+
+            showError(
+                "Unable to change video quality.\n\n" +
+                    "Please try again."
+            )
         }
     }
+
+    // =========================================================
+    // QUALITY BUTTON
+    // =========================================================
 
     private fun updateQualityButton() {
-        if (!::qualityButton.isInitialized) return
 
-        // Always show the quality selector.
-        // Some HLS streams expose their adaptive variants only after the
-        // player is READY, and some streams expose only one variant.
-        qualityButton.visibility = View.VISIBLE
+        try {
 
-        val qualities = getVideoQualities()
+            if (!::qualityButton.isInitialized) {
+                return
+            }
 
-        if (!userSelectedQuality) {
-            qualityButton.text = "⚙  AUTO"
+            qualityButton.visibility =
+                View.VISIBLE
+
+            val qualities =
+                getVideoQualities()
+
+            if (!userSelectedQuality) {
+
+                qualityButton.text =
+                    "⚙  AUTO"
+            }
+
+            Log.d(
+                TAG,
+                "QUALITY BUTTON VISIBLE. " +
+                    "OPTIONS=${qualities.size}"
+            )
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Update quality button failed",
+                e
+            )
         }
-
-        Log.d(
-            TAG,
-            "QUALITY BUTTON VISIBLE. OPTIONS=${qualities.size}"
-        )
     }
 
-    private fun formatBitrate(bitrate: Int): String {
-        if (bitrate <= 0) return ""
+    private fun formatBitrate(
+        bitrate: Int
+    ): String {
 
-        return if (bitrate >= 1_000_000) {
+        if (bitrate <= 0) {
+            return ""
+        }
+
+        return if (
+            bitrate >= 1_000_000
+        ) {
+
             String.format(
                 java.util.Locale.US,
                 "%.1f Mbps",
                 bitrate / 1_000_000.0
             )
+
         } else {
+
             "${bitrate / 1000} Kbps"
         }
     }
 
-    private fun showLoading() {
-        if (::loadingView.isInitialized) {
-            loadingView.visibility = View.VISIBLE
-        }
+    // =========================================================
+    // LOADING
+    // =========================================================
 
-        if (::errorContainer.isInitialized) {
-            errorContainer.visibility = View.GONE
+    private fun showLoading() {
+
+        try {
+
+            if (::loadingView.isInitialized) {
+
+                loadingView.visibility =
+                    View.VISIBLE
+            }
+
+            if (::errorContainer.isInitialized) {
+
+                errorContainer.visibility =
+                    View.GONE
+            }
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Show loading failed",
+                e
+            )
         }
     }
 
     private fun hideLoading() {
-        if (::loadingView.isInitialized) {
-            loadingView.visibility = View.GONE
+
+        try {
+
+            if (::loadingView.isInitialized) {
+
+                loadingView.visibility =
+                    View.GONE
+            }
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Hide loading failed",
+                e
+            )
         }
     }
 
-    private fun showError(message: String) {
-        hideLoading()
+    // =========================================================
+    // ERROR DIALOG
+    // =========================================================
 
-        if (!::errorContainer.isInitialized) return
+    private fun showError(
+        message: String
+    ) {
 
-        errorContainer.visibility = View.VISIBLE
-        errorText.text = message
+        runOnUiThread {
+
+            try {
+
+                hideLoading()
+
+                if (
+                    isFinishing ||
+                    isDestroyed
+                ) {
+                    return@runOnUiThread
+                }
+
+                errorDialog?.dismiss()
+
+                errorDialog =
+                    android.app.AlertDialog
+                        .Builder(this)
+                        .setTitle(
+                            "Video Error"
+                        )
+                        .setMessage(
+                            message
+                        )
+                        .setCancelable(false)
+                        .setNegativeButton(
+                            "Close"
+                        ) { dialog, _ ->
+
+                            dialog.dismiss()
+
+                            finish()
+                        }
+                        .setPositiveButton(
+                            "Retry"
+                        ) { dialog, _ ->
+
+                            dialog.dismiss()
+
+                            hideError()
+
+                            initializePlayer()
+                        }
+                        .create()
+
+                errorDialog?.setOnShowListener {
+
+                    try {
+
+                        errorDialog
+                            ?.getButton(
+                                android.app.AlertDialog
+                                    .BUTTON_POSITIVE
+                            )
+                            ?.setTextColor(
+                                Color.WHITE
+                            )
+
+                        errorDialog
+                            ?.getButton(
+                                android.app.AlertDialog
+                                    .BUTTON_NEGATIVE
+                            )
+                            ?.setTextColor(
+                                Color.WHITE
+                            )
+
+                    } catch (e: Exception) {
+
+                        Log.e(
+                            TAG,
+                            "Dialog button setup failed",
+                            e
+                        )
+                    }
+                }
+
+                errorDialog?.show()
+
+                // Keep existing fallback error UI updated.
+                if (
+                    ::errorContainer.isInitialized
+                ) {
+
+                    errorContainer.visibility =
+                        View.VISIBLE
+
+                    errorText.text =
+                        message
+                }
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    TAG,
+                    "Failed to show error dialog",
+                    e
+
+                )
+
+                // Last fallback.
+                try {
+
+                    if (
+                        ::errorContainer.isInitialized
+                    ) {
+
+                        errorContainer.visibility =
+                            View.VISIBLE
+
+                        errorText.text =
+                            message
+                    }
+
+                    Toast.makeText(
+                        this,
+                        message,
+                        Toast.LENGTH_LONG
+                    ).show()
+
+                } catch (ignored: Exception) {
+
+                    Log.e(
+                        TAG,
+                        "Error fallback failed",
+                        ignored
+                    )
+                }
+            }
+        }
     }
 
     private fun hideError() {
-        if (::errorContainer.isInitialized) {
-            errorContainer.visibility = View.GONE
+
+        try {
+
+            errorDialog?.dismiss()
+
+            errorDialog = null
+
+            if (
+                ::errorContainer.isInitialized
+            ) {
+
+                errorContainer.visibility =
+                    View.GONE
+            }
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Hide error failed",
+                e
+            )
         }
     }
 
-    private fun getReadableError(error: PlaybackException): String {
-        val cause = error.cause
+    // =========================================================
+    // ERROR MESSAGE
+    // =========================================================
+
+    private fun getReadableError(
+        error: PlaybackException
+    ): String {
+
+        Log.e(
+            TAG,
+            "Playback error code = " +
+                error.errorCodeName
+        )
+
+        Log.e(
+            TAG,
+            "Playback error message = " +
+                error.message
+        )
+
+        val cause =
+            error.cause
+
+        // -----------------------------------------------------
+        // HTTP
+        // -----------------------------------------------------
 
         if (
             error.errorCode ==
-                PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
+                PlaybackException
+                    .ERROR_CODE_IO_BAD_HTTP_STATUS
         ) {
+
             val code =
                 (
-                    cause as? androidx.media3.datasource
-                        .HttpDataSource.InvalidResponseCodeException
-                    )?.responseCode
+                    cause as? androidx.media3
+                        .datasource
+                        .HttpDataSource
+                        .InvalidResponseCodeException
+                    )
+                    ?.responseCode
 
-            if (code == 403) {
-                return "Bunny Stream returned HTTP 403.\n\n" +
-                    "Check Token Authentication, Allowed Referrers " +
-                    "and video security settings."
+            return when (code) {
+
+                400 -> {
+
+                    "Bad video request (HTTP 400).\n\n" +
+                        "The video URL may be invalid."
+                }
+
+                401 -> {
+
+                    "Video authorization failed " +
+                        "(HTTP 401).\n\n" +
+                        "Please check video access permission."
+                }
+
+                403 -> {
+
+                    "Video access denied " +
+                        "(HTTP 403).\n\n" +
+                        "Please check Google Drive/Bunny " +
+                        "permissions and security settings."
+                }
+
+                404 -> {
+
+                    "Video not found " +
+                        "(HTTP 404).\n\n" +
+                        "The video may have been deleted " +
+                        "or the URL is invalid."
+                }
+
+                408 -> {
+
+                    "Video request timed out " +
+                        "(HTTP 408).\n\n" +
+                        "Please try again."
+                }
+
+                429 -> {
+
+                    "Too many video requests " +
+                        "(HTTP 429).\n\n" +
+                        "Please try again later."
+                }
+
+                500, 502, 503, 504 -> {
+
+                    "Video server is temporarily unavailable " +
+                        "(HTTP $code).\n\n" +
+                        "Please try again later."
+                }
+
+                else -> {
+
+                    if (code != null) {
+
+                        "Video server returned HTTP $code."
+
+                    } else {
+
+                        "Unable to load video from server."
+                    }
+                }
             }
+        }
 
-            return if (code != null) {
-                "Server returned HTTP $code."
-            } else {
-                "Unable to load video."
-            }
+        // -----------------------------------------------------
+        // NETWORK
+        // -----------------------------------------------------
+
+        if (
+            error.errorCode ==
+                PlaybackException
+                    .ERROR_CODE_IO_NETWORK_CONNECTION_FAILED
+        ) {
+
+            return (
+                "Network connection failed.\n\n" +
+                    "Please check your internet connection " +
+                    "and try again."
+                )
         }
 
         if (
             error.errorCode ==
-                PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED
+                PlaybackException
+                    .ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
         ) {
-            return "Network connection failed.\n\n" +
-                "Please check your internet connection."
+
+            return (
+                "Video connection timed out.\n\n" +
+                    "Please check your internet connection " +
+                    "and try again."
+                )
+        }
+
+        // -----------------------------------------------------
+        // MALFORMED VIDEO
+        // -----------------------------------------------------
+
+        if (
+            error.errorCode ==
+                PlaybackException
+                    .ERROR_CODE_PARSING_CONTAINER_MALFORMED
+        ) {
+
+            return (
+                "The video format is not supported " +
+                    "or the video file is corrupted."
+                )
+        }
+
+        // -----------------------------------------------------
+        // DECODER
+        // -----------------------------------------------------
+
+        if (
+            error.errorCode ==
+                PlaybackException
+                    .ERROR_CODE_DECODER_INIT_FAILED
+        ) {
+
+            return (
+                "This video cannot be decoded on this device.\n\n" +
+                    "Please try another video quality."
+                )
         }
 
         if (
             error.errorCode ==
-                PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+                PlaybackException
+                    .ERROR_CODE_DECODING_FAILED
         ) {
-            return "Connection timed out.\n\n" +
-                "Please try again."
+
+            return (
+                "Video decoding failed.\n\n" +
+                    "Please retry or choose another quality."
+                )
         }
+
+        // -----------------------------------------------------
+        // SOURCE ERROR
+        // -----------------------------------------------------
 
         if (
             error.errorCode ==
-                PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED
+                PlaybackException
+                    .ERROR_CODE_IO_FILE_NOT_FOUND
         ) {
-            return "The video format is not supported or is corrupted."
+
+            return (
+                "Video file was not found.\n\n" +
+                    "Please contact support if the problem continues."
+                )
         }
 
-        return "Unable to play this video.\n\n${error.errorCodeName}"
+        // -----------------------------------------------------
+        // FALLBACK
+        // -----------------------------------------------------
+
+        return (
+            "Unable to play this video.\n\n" +
+                "Error: ${error.errorCodeName}"
+            )
     }
 
-    override fun onConfigurationChanged(newConfig: Configuration) {
-        super.onConfigurationChanged(newConfig)
+    // =========================================================
+    // CONFIGURATION
+    // =========================================================
 
-        updateVideoLayout()
-        hideSystemBars()
-        updateOrientationUI(newConfig.orientation)
-    }
+    override fun onConfigurationChanged(
+        newConfig: Configuration
+    ) {
 
-    private fun hideSystemBars() {
-        WindowCompat.setDecorFitsSystemWindows(window, false)
+        try {
 
-        WindowInsetsControllerCompat(
-            window,
-            window.decorView
-        ).apply {
-            hide(
-                WindowInsetsCompat.Type.statusBars() or
-                    WindowInsetsCompat.Type.navigationBars()
+            super.onConfigurationChanged(
+                newConfig
             )
 
-            systemBarsBehavior =
-                WindowInsetsControllerCompat
-                    .BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        }
-    }
+            updateVideoLayout()
 
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-
-        if (hasFocus) {
             hideSystemBars()
+
+            updateOrientationUI(
+                newConfig.orientation
+            )
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Configuration change failed",
+                e
+            )
         }
     }
 
-    override fun onPause() {
-        super.onPause()
+    // =========================================================
+    // SYSTEM BARS
+    // =========================================================
 
-        player?.let {
-            lastPosition = it.currentPosition
-            wasPlaying = it.isPlaying
-        }
+    private fun hideSystemBars() {
 
-        player?.pause()
-    }
+        try {
 
-    override fun onResume() {
-        super.onResume()
+            WindowCompat
+                .setDecorFitsSystemWindows(
+                    window,
+                    false
+                )
 
-        hideSystemBars()
+            WindowInsetsControllerCompat(
+                window,
+                window.decorView
+            ).apply {
 
-        if (player != null && wasPlaying) {
-            player?.playWhenReady = true
-        }
-    }
+                hide(
+                    WindowInsetsCompat
+                        .Type
+                        .statusBars() or
+                        WindowInsetsCompat
+                            .Type
+                            .navigationBars()
+                )
 
-    override fun onDestroy() {
-        controlsHandler.removeCallbacks(controlsHideRunnable)
-        controlsHandler.removeCallbacks(progressRunnable)
-
-        lastPosition =
-            if (player != null) {
-                player?.currentPosition ?: lastPosition
-            } else {
-                lastPosition
+                systemBarsBehavior =
+                    WindowInsetsControllerCompat
+                        .BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
 
-        if (::playerView.isInitialized) {
-            playerView.player = null
-        }
+        } catch (e: Exception) {
 
-        player?.release()
-        player = null
+            Log.e(
+                TAG,
+                "Hide system bars failed",
+                e
+            )
+        }
+    }
+
+    // =========================================================
+    // WINDOW FOCUS
+    // =========================================================
+
+    override fun onWindowFocusChanged(
+        hasFocus: Boolean
+    ) {
+
+        try {
+
+            super.onWindowFocusChanged(
+                hasFocus
+            )
+
+            if (hasFocus) {
+
+                hideSystemBars()
+            }
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Window focus failed",
+                e
+            )
+        }
+    }
+
+    // =========================================================
+    // PAUSE
+    // =========================================================
+
+    override fun onPause() {
+
+        try {
+
+            super.onPause()
+
+            player?.let { p ->
+
+                lastPosition =
+                    p.currentPosition
+
+                wasPlaying =
+                    p.isPlaying
+            }
+
+            player?.pause()
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Pause failed",
+                e
+            )
+        }
+    }
+
+    // =========================================================
+    // RESUME
+    // =========================================================
+
+    override fun onResume() {
+
+        try {
+
+            super.onResume()
+
+            hideSystemBars()
+
+            if (
+                player != null &&
+                wasPlaying &&
+                !isFinishing &&
+                !isDestroyed
+            ) {
+
+                player?.playWhenReady =
+                    true
+            }
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Resume failed",
+                e
+            )
+        }
+    }
+
+    // =========================================================
+    // DESTROY
+    // =========================================================
+
+    override fun onDestroy() {
+
+        try {
+
+            controlsHandler
+                .removeCallbacks(
+                    controlsHideRunnable
+                )
+
+            controlsHandler
+                .removeCallbacks(
+                    progressRunnable
+                )
+
+            errorDialog?.dismiss()
+
+            errorDialog = null
+
+            if (::videoTextureView.isInitialized) {
+                player?.clearVideoTextureView(videoTextureView)
+            }
+
+            player?.release()
+
+            player = null
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Player cleanup failed",
+                e
+            )
+        }
 
         super.onDestroy()
     }
 
-    private fun dp(value: Int): Int =
-        (value * resources.displayMetrics.density).toInt()
+    // =========================================================
+    // DP
+    // =========================================================
+
+    private fun dp(
+        value: Int
+    ): Int {
+
+        return (
+            value *
+                resources
+                    .displayMetrics
+                    .density
+            ).toInt()
+    }
 }

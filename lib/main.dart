@@ -35,6 +35,7 @@ import 'package:lms/presentation/screen/user/my_profile_screen/contact_us_screen
 import 'package:lms/presentation/screen/user/my_profile_screen/edit_profile_screen.dart';
 import 'package:lms/presentation/screen/user/my_profile_screen/help_center_screen.dart';
 import 'package:lms/presentation/screen/user/my_profile_screen/my_cart_screen.dart';
+import 'package:lms/presentation/screen/user/my_profile_screen/payment_history_screen.dart';
 import 'package:lms/presentation/screen/user/onboard_screen/onboard_screen.dart';
 import 'package:lms/presentation/screen/user/splash_screen/splash_screen.dart';
 import 'package:lms/presentation/screen/user/user_all_webinar_screen.dart';
@@ -180,6 +181,7 @@ class MyApp extends StatelessWidget {
               return _customPageRoute(
                 TrainerWebinarCourseDetailPage(courseId: courseId),
               );
+
             case '/viewallparticipents':
               final args = settings.arguments as Map<String, dynamic>;
               final courseId = args["courseId"];
@@ -199,6 +201,8 @@ class MyApp extends StatelessWidget {
               return _customPageRoute(ChangePasswordScreen());
             case '/contactusscreen':
               return _customPageRoute(ContactUsScreen());
+            case '/paymenthistoryscreen':
+              return _customPageRoute(PaymentHistoryScreen());
             default:
               return null;
           }

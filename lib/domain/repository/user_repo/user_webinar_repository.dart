@@ -9,7 +9,10 @@ abstract class UserWebinarRepository {
   Future<Either<Failure, UserFullListWebinarModel>> getAllUserWebinars(
     String? status,
     String? search,
-  );
+    int? paymentStatus, {
+    int page = 1,
+    int pageSize = 5,
+  });
   // Future<Either<Failure, NotificationModel>> getAllNotification(String? isRead);
   // Future<Either<Failure, Success>> makeIsRead(String? notificationId);
 }

@@ -2,11 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:lms/animation/animation.dart';
+import 'package:lms/animation/webinar_stager_animation.dart';
+import 'package:lms/core/api_end_point.dart';
 import 'package:lms/core/colors.dart';
 import 'package:lms/core/failure.dart';
-import 'package:lms/data/model/trainer_full_list_webinar_model/trainer_full_list_webinar_model.dart';
 import 'package:lms/data/model/user_full_list_webinar_model/user_full_list_webinar_model.dart';
-import 'package:lms/presentation/provider/trainer_provider/trainer_all_webinar_provider.dart';
 import 'package:lms/presentation/provider/user_provider/user_all_wbinar_provider.dart';
 import 'package:lms/presentation/screen/user/home_screen/widgets/home_header_section.dart';
 import 'package:lms/presentation/screen/user/home_screen/widgets/webinar_price_label.dart';
@@ -14,6 +15,22 @@ import 'package:lms/presentation/widgets/diloges/app_dialog_helper.dart';
 import 'package:lms/presentation/widgets/network_retry_widget.dart';
 import 'package:lms/presentation/widgets/reusablebackground/reusablebackground.dart';
 import 'package:provider/provider.dart';
+
+enum PaymentStatus {
+  notRequired(1, 'Not Required'),
+  pending(2, 'Pending'),
+  processing(3, 'Processing'),
+  paid(4, 'Paid'),
+  failed(5, 'Failed'),
+  cancelled(6, 'Cancelled'),
+  expired(7, 'Expired'),
+  refunded(8, 'Refunded');
+
+  final int value;
+  final String label;
+
+  const PaymentStatus(this.value, this.label);
+}
 
 class UserAllWebinarScreen extends StatefulWidget {
   const UserAllWebinarScreen({super.key});
@@ -24,31 +41,102 @@ class UserAllWebinarScreen extends StatefulWidget {
 
 class _UserAllWebinarScreenState extends State<UserAllWebinarScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   Timer? _searchDebounce;
   String _selectedFilter = 'Upcoming';
+  PaymentStatus? _selectedPaymentStatus;
   bool _isDialogShowing = false;
-  final List<String> _filters = const ['All', 'Upcoming', 'Past', 'Live'];
+  final List<String> _filters = const [
+    'All',
+    'Upcoming',
+    'Past',
+    'Live',
+    'Not Required',
+    'Pending',
+    'Processing',
+    'Paid',
+    'Failed',
+    'Cancelled',
+    'Expired',
+    'Refunded',
+  ];
+
+  PaymentStatus? _getPaymentStatus(String filter) {
+    switch (filter) {
+      case 'Not Required':
+        return PaymentStatus.notRequired;
+
+      case 'Pending':
+        return PaymentStatus.pending;
+
+      case 'Processing':
+        return PaymentStatus.processing;
+
+      case 'Paid':
+        return PaymentStatus.paid;
+
+      case 'Failed':
+        return PaymentStatus.failed;
+
+      case 'Cancelled':
+        return PaymentStatus.cancelled;
+
+      case 'Expired':
+        return PaymentStatus.expired;
+
+      case 'Refunded':
+        return PaymentStatus.refunded;
+
+      default:
+        return null;
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-
+    _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initialData();
     });
   }
 
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+
+    // Load more when 300 pixels remain
+    if (_scrollController.position.extentAfter < 300) {
+      final provider = context.read<UserAllWbinarProvider>();
+
+      if (!provider.isLoading && !provider.isLoadingMore && provider.hasMore) {
+        final bool isPaymentFilter = _selectedPaymentStatus != null;
+
+        provider.getAllWebinarPro(
+          isPaymentFilter ? null : _getStatus(_selectedFilter),
+          _searchController.text.trim(),
+          paymentStatus: _selectedPaymentStatus?.value,
+          loadMore: true,
+        );
+      }
+    }
+  }
   // ============================================================
   // LOAD WEBINARS
   // ============================================================
 
   Future<void> _initialData({String? status}) async {
-    print('Initial Data Load: Status = ${status}');
+    print('Initial Data Load: Status = ${_selectedFilter}');
     if (!mounted) return;
 
     final provider = context.read<UserAllWbinarProvider>();
     final selectedStatus = status ?? _getStatus(_selectedFilter);
-    await provider.getAllWebinarPro(selectedStatus, '');
+    // await provider.getAllWebinarPro(selectedStatus, '');
+    final bool isPaymentFilter = _selectedPaymentStatus != null;
+    provider.getAllWebinarPro(
+      isPaymentFilter ? null : _getStatus(_selectedFilter),
+      _searchController.text.trim(),
+      paymentStatus: _selectedPaymentStatus?.value,
+    );
 
     if (!mounted) return;
   }
@@ -75,32 +163,64 @@ class _UserAllWebinarScreenState extends State<UserAllWebinarScreen> {
         return '1';
     }
   }
+
   // ============================================================
   // FILTER
   // ============================================================
 
   Future<void> _onFilterSelected(String filter) async {
     print('Selected Filter: $filter');
-    if (_selectedFilter == filter) return;
+
+    if (_selectedFilter == filter) {
+      return;
+    }
 
     final previousFilter = _selectedFilter;
+    final previousPaymentStatus = _selectedPaymentStatus;
+
+    final paymentStatus = _getPaymentStatus(filter);
 
     setState(() {
       _selectedFilter = filter;
+      _selectedPaymentStatus = paymentStatus;
     });
-
+    print(
+      'Updated Filter: $_selectedFilter | Payment Status: $_selectedPaymentStatus',
+    );
+    print('');
     final provider = context.read<UserAllWbinarProvider>();
 
-    final status = _getStatus(filter);
+    // ------------------------------------------------------------
+    // TIME FILTER
+    // ------------------------------------------------------------
 
-    await provider.getAllWebinarPro(status, '');
+    String? timeFilter;
+
+    if (paymentStatus == null) {
+      // Selected All / Upcoming / Past / Live
+      timeFilter = _getStatus(filter);
+    } else {
+      // Selected Payment Status
+      // Do not send TimeFilter
+      timeFilter = null;
+    }
+
+    // ------------------------------------------------------------
+    // API
+    // ------------------------------------------------------------
+
+    await provider.getAllWebinarPro(
+      timeFilter,
+      _searchController.text.trim(),
+      paymentStatus: paymentStatus?.value,
+    );
 
     if (!mounted) return;
 
     if (provider.failure != null) {
-      // Restore previous filter if API fails.
       setState(() {
         _selectedFilter = previousFilter;
+        _selectedPaymentStatus = previousPaymentStatus;
       });
 
       handleFailure(provider);
@@ -150,12 +270,18 @@ class _UserAllWebinarScreenState extends State<UserAllWebinarScreen> {
 
       final provider = context.read<UserAllWbinarProvider>();
 
-      final status = _getStatus(_selectedFilter);
+      final bool isPaymentFilter = _selectedPaymentStatus != null;
 
-      await provider.getAllWebinarPro(status, value.trim());
+      final String? timeFilter =
+          isPaymentFilter ? null : _getStatus(_selectedFilter);
+
+      await provider.getAllWebinarPro(
+        timeFilter,
+        value.trim(),
+        paymentStatus: _selectedPaymentStatus?.value,
+      );
     });
   }
-
   // ============================================================
   // BUILD
   // ============================================================
@@ -163,6 +289,9 @@ class _UserAllWebinarScreenState extends State<UserAllWebinarScreen> {
   @override
   void dispose() {
     // TODO: implement dispose
+
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     _searchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
@@ -176,85 +305,87 @@ class _UserAllWebinarScreenState extends State<UserAllWebinarScreen> {
           final bool isTablet = constraints.maxWidth >= 600;
           return RefreshIndicator(
             onRefresh: _initialData,
-            color: AppColor.formPrimaryColor,
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.only(bottom: 100),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(height: isTablet ? 80 : 66),
-                    // App Bar
-                    // ==================================================
-                    // HEADER
-                    // ==================================================
-                    HomeHeaderSectionWidget(
-                      isTablet: isTablet,
-                      title: 'Manage Webinars',
-                      subTitle: 'All your classes in one place',
-                      showNotificationIcon: true,
-                      showProfileImage: false,
+            color: AppColor.gold,
+            backgroundColor: AppColor.background,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(height: isTablet ? 80 : 66),
+                  // App Bar
+                  // ==================================================
+                  // HEADER
+                  // ==================================================
+                  HomeHeaderSectionWidget(
+                    isTablet: isTablet,
+                    title: 'Manage Webinars',
+                    subTitle: 'All your classes in one place',
+                    showNotificationIcon: true,
+                    showProfileImage: false,
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // ==================================================
+                  // SEARCH BAR
+                  // ==================================================
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: isTablet ? 8 : 0),
+                    child: _WebinarSearchBar(
+                      controller: _searchController,
+                      onChanged: _onSearchChanged,
                     ),
+                  ),
 
-                    const SizedBox(height: 20),
+                  const SizedBox(height: 16),
 
-                    // ==================================================
-                    // SEARCH BAR
-                    // ==================================================
-                    Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isTablet ? 8 : 0,
-                      ),
-                      child: _WebinarSearchBar(
-                        controller: _searchController,
-                        onChanged: _onSearchChanged,
-                      ),
-                    ),
+                  // ==================================================
+                  // FILTER
+                  // ==================================================
+                  _WebinarFilterBar(
+                    filters: _filters,
+                    selected: _selectedFilter,
+                    onSelected: _onFilterSelected,
+                  ),
 
-                    const SizedBox(height: 16),
+                  const SizedBox(height: 20),
 
-                    // ==================================================
-                    // FILTER
-                    // ==================================================
-                    _WebinarFilterBar(
-                      filters: _filters,
-                      selected: _selectedFilter,
-                      onSelected: _onFilterSelected,
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    // ==================================================
-                    // CONTENT
-                    // ==================================================
-                    Consumer<UserAllWbinarProvider>(
-                      builder: (context, provider, child) {
-                        if (provider.isLoading) {
-                          return const _WebinarLoadingState();
-                        }
-                        final failure = provider.failure;
-                        if (failure is NetworkFailure) {
-                          return NetWorkRetry(
-                            failureMessage:
-                                provider.failure?.message ??
-                                "No internet connection",
-                            onRetry: () async {
-                              await _initialData();
-                            },
-                          );
-                        }
-                        return WebinarList(
-                          userAllWbinarProvider: provider,
-                          onRetry: _initialData,
+                  // ==================================================
+                  // CONTENT
+                  // ==================================================
+                  Consumer<UserAllWbinarProvider>(
+                    builder: (context, provider, child) {
+                      if (provider.isLoading) {
+                        return const _WebinarLoadingState();
+                      }
+                      final failure = provider.failure;
+                      if (failure is NetworkFailure) {
+                        return NetWorkRetry(
+                          failureMessage:
+                              provider.failure?.message ??
+                              "No internet connection",
+                          onRetry: () async {
+                            await _initialData();
+                          },
                         );
-                      },
-                    ),
+                      }
+                      return Expanded(
+                        child: SingleChildScrollView(
+                          controller: _scrollController,
+                          physics: AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.only(bottom: 100),
+                          child: WebinarList(
+                            userAllWbinarProvider: provider,
+                            onRetry: _initialData,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
 
-                    const SizedBox(height: 30),
-                  ],
-                ),
+                  const SizedBox(height: 30),
+                ],
               ),
             ),
           );
@@ -360,10 +491,11 @@ class WebinarList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final AllWebinarData? data =
-        userAllWbinarProvider.fullListWebinarModel?.data;
+    // final AllWebinarData? data =
+    //     userAllWbinarProvider.fullListWebinarModel?.data;
 
-    final items = data?.items ?? [];
+    // final items = data?.items ?? [];
+    final items = userAllWbinarProvider.webinarItems;
 
     // ------------------------------------------------------------
     // EMPTY STATE
@@ -381,22 +513,40 @@ class WebinarList extends StatelessWidget {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       padding: EdgeInsets.zero,
-      itemCount: items.length,
+      itemCount: items.length + (userAllWbinarProvider.isLoadingMore ? 1 : 0),
       separatorBuilder: (_, __) {
         return const SizedBox(height: 12);
       },
       itemBuilder: (context, index) {
+        // Bottom loading indicator
+        if (index >= items.length) {
+          return Padding(
+            padding: EdgeInsets.symmetric(vertical: 20),
+            child: Center(
+              child: CircularProgressIndicator(color: AppColor.gold),
+            ),
+          );
+        }
         final webinar = items[index];
 
-        return WebinarTile(
+        return WebinarStaggerAnimation(
           key: ValueKey(webinar.id),
-          title: _safeString(webinar.title),
-          status: _getStatusText(webinar.status),
-          students: '0',
-          startDateTime: _safeString(webinar.startDateTime),
-          recentWebinarId: webinar.id?.toString() ?? '',
-          isPaid: webinar.isPaid,
-          price: webinar.price,
+          index: index,
+          child: Column(
+            children: [
+              WebinarTile(
+                key: ValueKey(webinar.id),
+                title: _safeString(webinar.title),
+                status: _getStatusText(webinar.status),
+                students: '0',
+                startDateTime: _safeString(webinar.startDateTime),
+                recentWebinarId: webinar.id?.toString() ?? '',
+                isPaid: webinar.isPaid,
+                price: webinar.price,
+                imageUrl: webinar.thumbnailUrl ?? '',
+              ),
+            ],
+          ),
         );
       },
     );
@@ -445,6 +595,7 @@ class WebinarTile extends StatelessWidget {
   final String recentWebinarId;
   final String? isPaid;
   final String? price;
+  final String? imageUrl;
 
   const WebinarTile({
     super.key,
@@ -455,6 +606,7 @@ class WebinarTile extends StatelessWidget {
     required this.recentWebinarId,
     required this.isPaid,
     required this.price,
+    required this.imageUrl,
   });
 
   // ============================================================
@@ -531,126 +683,161 @@ class WebinarTile extends StatelessWidget {
                   );
                 },
         child: Ink(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: AppColor.cardBackground,
             borderRadius: BorderRadius.circular(18),
             border: Border.all(color: AppColor.borderGlassColor),
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ==================================================
-              // ICON
-              // ==================================================
-              Container(
-                height: 52,
-                width: 52,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppColor.gold.withOpacity(0.20),
-                      AppColor.goldDark.withOpacity(0.12),
-                    ],
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // ==================================================
+                // ICON or image
+                // ==================================================
+                // IMAGE
+                SizedBox(
+                  width: 122,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(15),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            AppColor.gold.withOpacity(0.20),
+                            AppColor.goldDark.withOpacity(0.20),
+                          ],
+                        ),
+                      ),
+                      child:
+                          (imageUrl == null || imageUrl!.isEmpty)
+                              ? Icon(
+                                Icons.image_outlined,
+                                size: 60,
+                                color: Colors.grey.shade500,
+                              )
+                              : Image.network(
+                                '${ApiEndPoint.serverUrl}${imageUrl}',
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Icon(
+                                    Icons.image_outlined,
+                                    size: 60,
+                                    color: Colors.grey.shade500,
+                                  );
+                                },
+                              ),
+                    ),
                   ),
-                  borderRadius: BorderRadius.circular(15),
                 ),
-                child: Icon(
-                  Icons.video_collection_outlined,
-                  color: AppColor.gold.withOpacity(0.18),
-                  size: 25,
-                ),
-              ),
 
-              const SizedBox(width: 14),
-
-              // ==================================================
-              // CONTENT
-              // ==================================================
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // ------------------------------------------
-                    // TITLE + STATUS
-                    // ------------------------------------------
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
+                // ==================================================
+                // CONTENT
+                // ==================================================
+                Expanded(
+                  child: Container(
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // ------------------------------------------
+                          // TITLE + STATUS
+                          // ------------------------------------------
+                          Text(
+                            '${isPaid == 'true' ? 'PREMIUM' : 'FREE'}'
+                                .toUpperCase(),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color:
+                                  isPaid == 'true'
+                                      ? AppColor.gold
+                                      : Colors.green,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              height: 1.3,
+                              letterSpacing: 1.44, // 12% of 12px
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          // ------------------------------------------
+                          // TITLE + STATUS
+                          // ------------------------------------------
+                          Text(
                             title.isEmpty ? 'Untitled Webinar' : title,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w500,
                               height: 1.3,
                             ),
                           ),
-                        ),
 
-                        const SizedBox(width: 8),
+                          const SizedBox(height: 8),
 
-                        _StatusBadge(status: status, color: _statusColor()),
-                      ],
+                          // ------------------------------------------
+                          // DATE + TIME
+                          // ------------------------------------------
+                          Wrap(
+                            spacing: 14,
+                            runSpacing: 7,
+                            children: [
+                              _InfoItem(
+                                icon: Icons.calendar_today_outlined,
+                                text: formattedDate,
+                              ),
+                              _InfoItem(
+                                icon: Icons.access_time_outlined,
+                                text: formattedTime,
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          // ------------------------------------------
+                          // price
+                          // ------------------------------------------
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.currency_rupee,
+                                color: Colors.white54,
+                                size: 22,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                price ?? '',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: AppColor.ghostwhite,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w500,
+                                  height: 1.3,
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                '/ per slot',
+                                style: TextStyle(
+                                  color: Colors.white54,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
-
-                    const SizedBox(height: 11),
-
-                    // ------------------------------------------
-                    // DATE + TIME
-                    // ------------------------------------------
-                    Wrap(
-                      spacing: 14,
-                      runSpacing: 7,
-                      children: [
-                        _InfoItem(
-                          icon: Icons.calendar_today_outlined,
-                          text: formattedDate,
-                        ),
-                        _InfoItem(
-                          icon: Icons.access_time_outlined,
-                          text: formattedTime,
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 8),
-
-                    // ------------------------------------------
-                    // price
-                    // ------------------------------------------
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.currency_rupee,
-                          color: Colors.white54,
-                          size: 15,
-                        ),
-                        const SizedBox(width: 5),
-                        webinarPriceLabel(isPaid: isPaid, price: price),
-                      ],
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-
-              const SizedBox(width: 8),
-
-              // ==================================================
-              // ARROW
-              // ==================================================
-              Padding(
-                padding: const EdgeInsets.only(top: 16),
-                child: Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  color: hasId ? Colors.white38 : Colors.white12,
-                  size: 15,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -708,9 +895,12 @@ class _InfoItem extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: Colors.white54, size: 14),
+        Icon(icon, color: AppColor.lightgray, size: 16),
         const SizedBox(width: 5),
-        Text(text, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+        Text(
+          text,
+          style: const TextStyle(color: AppColor.lightgray, fontSize: 12),
+        ),
       ],
     );
   }

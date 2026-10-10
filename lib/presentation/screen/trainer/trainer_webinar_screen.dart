@@ -2,11 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:lms/core/api_end_point.dart';
 import 'package:lms/core/colors.dart';
 import 'package:lms/core/failure.dart';
 import 'package:lms/data/model/trainer_full_list_webinar_model/trainer_full_list_webinar_model.dart';
 import 'package:lms/presentation/provider/trainer_provider/trainer_all_webinar_provider.dart';
 import 'package:lms/presentation/screen/user/home_screen/widgets/home_header_section.dart';
+import 'package:lms/presentation/widgets/common_custome_button_widget.dart';
 import 'package:lms/presentation/widgets/diloges/app_dialog_helper.dart';
 import 'package:lms/presentation/widgets/network_retry_widget.dart';
 import 'package:lms/presentation/widgets/reusablebackground/reusablebackground.dart';
@@ -363,41 +365,36 @@ class WebinarList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Data? data =
-        trainerAllWebinarProvider.trainerFullListWebinarModel?.data;
+    final data = trainerAllWebinarProvider.trainerFullListWebinarModel?.data;
 
     final items = data?.items ?? [];
-
-    // ------------------------------------------------------------
-    // EMPTY STATE
-    // ------------------------------------------------------------
 
     if (items.isEmpty) {
       return const _WebinarEmptyState();
     }
-
-    // ------------------------------------------------------------
-    // LIST
-    // ------------------------------------------------------------
 
     return ListView.separated(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       padding: EdgeInsets.zero,
       itemCount: items.length,
-      separatorBuilder: (_, __) {
-        return const SizedBox(height: 12);
-      },
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final webinar = items[index];
 
         return WebinarTile(
           key: ValueKey(webinar.id),
           title: _safeString(webinar.title),
-          status: _getStatusText(webinar.status),
-          students: '0',
+          status:
+              _safeString(webinar.statusName).isNotEmpty
+                  ? _safeString(webinar.statusName)
+                  : _getStatusText(webinar.status),
+          students: _safeString(webinar.enrolledParticipantCount),
           startDateTime: _safeString(webinar.startDateTime),
-          recentWebinarId: webinar.id?.toString() ?? '',
+          recentWebinarId: _safeString(webinar.id),
+          isPaid: _safeString(webinar.isPaid),
+          price: _formatPrice(webinar.price, _safeString(null), webinar.isPaid),
+          imageUrl: _safeString(webinar.thumbnailUrl),
         );
       },
     );
@@ -409,28 +406,46 @@ class WebinarList extends StatelessWidget {
   }
 
   String _getStatusText(dynamic status) {
-    if (status == null) {
-      return 'Unknown';
-    }
-
-    final String value = status.toString();
-
-    switch (value) {
+    switch (status?.toString()) {
       case '2':
         return 'Scheduled';
-
       case '3':
         return 'Live';
-
       case '4':
         return 'Completed';
-
       case '5':
         return 'Cancelled';
-
       default:
-        return value.isEmpty ? 'Unknown' : value;
+        return 'Unknown';
     }
+  }
+
+  String _formatPrice(dynamic price, String currency, dynamic isPaid) {
+    final paid =
+        isPaid == true || isPaid?.toString().trim().toLowerCase() == 'true';
+
+    if (!paid) return 'Free';
+
+    if (price == null || price.toString().trim().isEmpty) {
+      return 'Price unavailable';
+    }
+
+    final amount = double.tryParse(price.toString());
+
+    final formattedAmount =
+        amount == null
+            ? price.toString()
+            : amount == amount.truncateToDouble()
+            ? amount.toInt().toString()
+            : amount.toStringAsFixed(2);
+
+    final currencyCode = currency.isEmpty ? 'INR' : currency.toUpperCase();
+
+    if (currencyCode == 'INR') {
+      return '$formattedAmount';
+    }
+
+    return '$currencyCode $formattedAmount';
   }
 }
 
@@ -444,6 +459,9 @@ class WebinarTile extends StatelessWidget {
   final String students;
   final String startDateTime;
   final String recentWebinarId;
+  final String? isPaid;
+  final String? price;
+  final String? imageUrl;
 
   const WebinarTile({
     super.key,
@@ -452,16 +470,25 @@ class WebinarTile extends StatelessWidget {
     required this.students,
     required this.startDateTime,
     required this.recentWebinarId,
+    required this.isPaid,
+    required this.price,
+    required this.imageUrl,
   });
 
-  // ============================================================
+  // ==========================================================================
+  // PREMIUM / FREE
+  // ==========================================================================
+
+  bool get _isPremium {
+    return isPaid?.trim().toLowerCase() == 'true';
+  }
+
+  // ==========================================================================
   // SAFE DATE PARSER
-  // ============================================================
+  // ==========================================================================
 
   DateTime? _parseDate(String value) {
-    if (value.trim().isEmpty) {
-      return null;
-    }
+    if (value.trim().isEmpty) return null;
 
     try {
       return DateTime.parse(value).toLocal();
@@ -470,32 +497,49 @@ class WebinarTile extends StatelessWidget {
     }
   }
 
-  // ============================================================
+  // ==========================================================================
   // STATUS COLOR
-  // ============================================================
+  // ==========================================================================
 
   Color _statusColor() {
-    switch (status.toLowerCase()) {
+    switch (status.trim().toLowerCase()) {
       case 'live':
         return Colors.redAccent;
-
       case 'scheduled':
         return Colors.orangeAccent;
-
       case 'completed':
+      case 'past':
         return Colors.greenAccent;
-
       case 'cancelled':
         return Colors.redAccent;
-
       default:
         return Colors.white70;
     }
   }
 
-  // ============================================================
+  // ==========================================================================
+  // THUMBNAIL URL
+  // ==========================================================================
+
+  String _thumbnailImageUrl(String path) {
+    final value = path.trim();
+
+    if (value.startsWith('https://') || value.startsWith('http://')) {
+      return value;
+    }
+
+    final baseUrl = ApiEndPoint.serverUrl;
+
+    if (value.startsWith('/')) {
+      return '$baseUrl$value';
+    }
+
+    return '$baseUrl/$value';
+  }
+
+  // ==========================================================================
   // BUILD
-  // ============================================================
+  // ==========================================================================
 
   @override
   Widget build(BuildContext context) {
@@ -511,7 +555,7 @@ class WebinarTile extends StatelessWidget {
             ? DateFormat('hh:mm a').format(dateTime)
             : 'Time unavailable';
 
-    final bool hasId = recentWebinarId.trim().isNotEmpty;
+    final hasId = recentWebinarId.trim().isNotEmpty;
 
     return Material(
       color: Colors.transparent,
@@ -528,120 +572,188 @@ class WebinarTile extends StatelessWidget {
                   );
                 },
         child: Ink(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: AppColor.cardBackground,
             borderRadius: BorderRadius.circular(18),
             border: Border.all(color: AppColor.borderGlassColor),
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ==================================================
-              // ICON
-              // ==================================================
-              Container(
-                height: 52,
-                width: 52,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppColor.gold.withOpacity(0.20),
-                      AppColor.goldDark.withOpacity(0.12),
-                    ],
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // ==========================================================
+                // THUMBNAIL
+                // ==========================================================
+                SizedBox(
+                  width: 122,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(15),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            AppColor.gold.withOpacity(.20),
+                            AppColor.goldDark.withOpacity(.20),
+                          ],
+                        ),
+                      ),
+                      child:
+                          imageUrl != null && imageUrl!.trim().isNotEmpty
+                              ? Image.network(
+                                _thumbnailImageUrl(imageUrl!),
+                                fit: BoxFit.cover,
+                                errorBuilder:
+                                    (_, __, ___) => _buildFallbackImage(),
+                              )
+                              : _buildFallbackImage(),
+                    ),
                   ),
-                  borderRadius: BorderRadius.circular(15),
                 ),
-                child: Icon(
-                  Icons.video_collection_outlined,
-                  color: AppColor.gold.withOpacity(0.18),
-                  size: 25,
-                ),
-              ),
 
-              const SizedBox(width: 14),
-
-              // ==================================================
-              // CONTENT
-              // ==================================================
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // ------------------------------------------
-                    // TITLE + STATUS
-                    // ------------------------------------------
-                    Row(
+                // ==========================================================
+                // CONTENT
+                // ==========================================================
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Text(
-                            title.isEmpty ? 'Untitled Webinar' : title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              height: 1.3,
-                            ),
+                        // Premium / Free
+                        Text(
+                          _isPremium ? 'PREMIUM' : 'FREE',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: _isPremium ? AppColor.gold : Colors.green,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            height: 1.3,
+                            letterSpacing: 1.44,
                           ),
                         ),
 
-                        const SizedBox(width: 8),
+                        const SizedBox(height: 4),
 
+                        // Title
+                        Text(
+                          title.isEmpty ? 'Untitled Webinar' : title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w500,
+                            height: 1.3,
+                          ),
+                        ),
+
+                        const SizedBox(height: 8),
+
+                        // Status
                         _StatusBadge(status: status, color: _statusColor()),
+
+                        const SizedBox(height: 8),
+
+                        // Date and time
+                        Wrap(
+                          spacing: 14,
+                          runSpacing: 7,
+                          children: [
+                            _InfoItem(
+                              icon: Icons.calendar_today_outlined,
+                              text: formattedDate,
+                            ),
+                            _InfoItem(
+                              icon: Icons.access_time_outlined,
+                              text: formattedTime,
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        // Enrolled students
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.people_outline,
+                              color: Colors.white54,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 5),
+                            Flexible(
+                              child: Text(
+                                '$students Students',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        // Divider
+                        const _DottedDivider(),
+
+                        const SizedBox(height: 12),
+
+                        // Price
+                        CommonCustomeButtonWidget(
+                          isTablet: false,
+                          text: 'Join',
+                          onTap: () {
+                            if (!hasId) return;
+
+                            Navigator.pushNamed(
+                              context,
+                              '/trainerwebinardetailpage',
+                              arguments: {'courseId': recentWebinarId},
+                            );
+                          },
+                          lotty: true,
+                        ),
                       ],
                     ),
-
-                    const SizedBox(height: 11),
-
-                    // ------------------------------------------
-                    // DATE + TIME
-                    // ------------------------------------------
-                    Wrap(
-                      spacing: 14,
-                      runSpacing: 7,
-                      children: [
-                        _InfoItem(
-                          icon: Icons.calendar_today_outlined,
-                          text: formattedDate,
-                        ),
-                        _InfoItem(
-                          icon: Icons.access_time_outlined,
-                          text: formattedTime,
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 8),
-
-                    // ------------------------------------------
-                    // STUDENTS
-                    // ------------------------------------------
-                    _InfoItem(
-                      icon: Icons.people_outline,
-                      text: '$students Students',
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-
-              const SizedBox(width: 8),
-
-              // ==================================================
-              // ARROW
-              // ==================================================
-              Padding(
-                padding: const EdgeInsets.only(top: 16),
-                child: Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  color: hasId ? Colors.white38 : Colors.white12,
-                  size: 15,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
+        ),
+      ),
+    );
+  }
+
+  // ==========================================================================
+  // FALLBACK IMAGE
+  // ==========================================================================
+
+  Widget _buildFallbackImage() {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppColor.gold.withOpacity(.20),
+            AppColor.goldDark.withOpacity(.20),
+          ],
+        ),
+      ),
+      child: const Center(
+        child: Icon(
+          Icons.video_collection_outlined,
+          size: 42,
+          color: AppColor.gold,
         ),
       ),
     );
@@ -660,23 +772,21 @@ class _StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String text = status.trim().isEmpty ? 'Unknown' : status;
-
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.10),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.18)),
+        color: color.withOpacity(.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(.25)),
       ),
       child: Text(
-        text,
+        status,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           color: color,
           fontSize: 10,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
@@ -700,8 +810,83 @@ class _InfoItem extends StatelessWidget {
       children: [
         Icon(icon, color: Colors.white54, size: 14),
         const SizedBox(width: 5),
-        Text(text, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+        Flexible(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white70, fontSize: 11),
+          ),
+        ),
       ],
+    );
+  }
+}
+
+// ============================================================================
+// DOTTED DIVIDER
+// ============================================================================
+
+class _DottedDivider extends StatelessWidget {
+  const _DottedDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: List.generate(35, (index) {
+        return Expanded(
+          child: Container(
+            height: 1,
+            margin: const EdgeInsets.symmetric(horizontal: 1),
+            color: const Color(0xffDDDDDD),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+// ============================================================================
+// EMPTY STATE
+// ============================================================================
+
+class _WebinarEmptyState extends StatelessWidget {
+  const _WebinarEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
+      decoration: BoxDecoration(
+        color: AppColor.cardBackground,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColor.borderGlassColor),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            Icons.video_collection_outlined,
+            size: 42,
+            color: AppColor.gold.withOpacity(.7),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'No webinars found',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 5),
+          const Text(
+            'Your webinars will appear here.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white60, fontSize: 12),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -784,51 +969,6 @@ class _WebinarShimmerTile extends StatelessWidget {
                 ),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// EMPTY STATE
-// ============================================================================
-
-class _WebinarEmptyState extends StatelessWidget {
-  const _WebinarEmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 55),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.035),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.07)),
-      ),
-      child: const Column(
-        children: [
-          Icon(
-            Icons.video_camera_front_outlined,
-            size: 52,
-            color: Colors.white30,
-          ),
-          SizedBox(height: 16),
-          Text(
-            'No webinars found',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          SizedBox(height: 7),
-          Text(
-            'There are no webinars available for this filter.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white54, fontSize: 13),
           ),
         ],
       ),

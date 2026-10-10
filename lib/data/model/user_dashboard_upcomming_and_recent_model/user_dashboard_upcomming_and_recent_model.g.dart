@@ -95,6 +95,7 @@ UserAssignedWebinar _$UserAssignedWebinarFromJson(Map<String, dynamic> json) =>
       thumbnailUrl: stringFromJson(json['thumbnailUrl']),
       isPaid: stringFromJson(json['isPaid']),
       price: stringFromJson(json['price']),
+      paymentStatus: stringFromJson(json['paymentStatus']),
     );
 
 Map<String, dynamic> _$UserAssignedWebinarToJson(
@@ -107,4 +108,5 @@ Map<String, dynamic> _$UserAssignedWebinarToJson(
   'thumbnailUrl': instance.thumbnailUrl,
   'isPaid': instance.isPaid,
   'price': instance.price,
+  'paymentStatus': instance.paymentStatus,
 };

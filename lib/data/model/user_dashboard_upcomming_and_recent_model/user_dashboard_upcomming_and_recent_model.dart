@@ -131,6 +131,9 @@ class UserAssignedWebinar {
   @JsonKey(fromJson: stringFromJson)
   String? price;
 
+  @JsonKey(fromJson: stringFromJson)
+  String? paymentStatus;
+
   UserAssignedWebinar({
     this.webinarId,
     this.title,
@@ -139,6 +142,7 @@ class UserAssignedWebinar {
     this.thumbnailUrl,
     this.isPaid,
     this.price,
+    this.paymentStatus,
   });
 
   factory UserAssignedWebinar.fromJson(Map<String, dynamic> json) {

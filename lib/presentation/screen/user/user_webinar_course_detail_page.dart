@@ -46,7 +46,9 @@ class _UserWebinarCourseDetailPageState
   static const platform = MethodChannel('lms.video.player');
   static const zoomPlatform = MethodChannel('lms.zoom');
   bool _isDialogShowing = false;
+  int _selectedContentTab = 0; // 0 = Resources, 1 = Recordings
   late final RazorpayService _razorpayService;
+
   @override
   void initState() {
     // TODO: implement initState
@@ -63,43 +65,145 @@ class _UserWebinarCourseDetailPageState
     });
   }
 
-  void _onPaymentSuccess(PaymentSuccessResponse response) async {
+  Future<void> _onPaymentSuccess(PaymentSuccessResponse response) async {
+    debugPrint('========================================');
+    debugPrint('RAZORPAY PAYMENT SUCCESS');
     debugPrint('Payment ID......: ${response.paymentId}');
     debugPrint('Order ID........: ${response.orderId}');
-    debugPrint('Signature........: ${response.signature}');
+    debugPrint('Signature.......: ${response.signature}');
+    debugPrint('========================================');
 
     if (!mounted) return;
 
+    final provider = context.read<PaymentProvider>();
+
     try {
-      final provider = context.read<UserCourseProvider>();
+      // ==========================================================
+      // 1. GET BACKEND PAYMENT ID
+      // ==========================================================
 
-      // TODO:
-      // Call your backend payment verification API here.
-      //
-      // await provider.verifyPaymentPro(
-      //   paymentId: response.paymentId ?? '',
-      //   orderId: response.orderId ?? '',
-      //   signature: response.signature ?? '',
-      // );
+      final paymentId =
+          provider.createPaymentOrderModel?.data?.paymentId?.toString();
 
-      // Refresh course detail
-      await provider.getCourseDetailPro(widget.courseId ?? '');
+      if (paymentId == null || paymentId.isEmpty) {
+        debugPrint('ERROR: Backend payment ID is missing');
+
+        _showPaymentError(
+          'Payment completed, but payment reference is missing. '
+          'Please contact support.',
+        );
+
+        return;
+      }
+
+      // ==========================================================
+      // 2. VALIDATE RAZORPAY RESPONSE
+      // ==========================================================
+
+      final razorpayPaymentId = response.paymentId;
+      final razorpayOrderId = response.orderId;
+      final razorpaySignature = response.signature;
+
+      if (razorpayPaymentId == null ||
+          razorpayPaymentId.isEmpty ||
+          razorpayOrderId == null ||
+          razorpayOrderId.isEmpty ||
+          razorpaySignature == null ||
+          razorpaySignature.isEmpty) {
+        debugPrint('ERROR: Razorpay response is incomplete');
+
+        _showPaymentError(
+          'Payment was completed, but payment details are incomplete. '
+          'Please contact support.',
+        );
+
+        return;
+      }
+
+      // ==========================================================
+      // 3. VERIFY PAYMENT
+      // ==========================================================
+
+      debugPrint('========================================');
+      debugPrint('VERIFYING PAYMENT');
+      debugPrint('Backend Payment ID: $paymentId');
+      debugPrint('Razorpay Payment ID: $razorpayPaymentId');
+      debugPrint('Razorpay Order ID: $razorpayOrderId');
+      debugPrint('========================================');
+
+      await provider.verifyPaymentPro(
+        paymentId,
+        razorpayOrderId,
+        razorpayPaymentId,
+        razorpaySignature,
+      );
 
       if (!mounted) return;
 
-      // ScaffoldMessenger.of(context).showSnackBar(
-      //   const SnackBar(content: Text('Payment successful. Access updated.')),
-      // );
+      // ==========================================================
+      // 4. VERIFICATION FAILURE
+      // ==========================================================
+
+      if (provider.failure != null) {
+        debugPrint('========================================');
+        debugPrint('PAYMENT VERIFICATION FAILED');
+        debugPrint('Failure: ${provider.failure?.message}');
+        debugPrint('========================================');
+
+        final failureMessage =
+            provider.failure?.message ??
+            'Payment verification failed. Please contact support.';
+
+        _showPaymentError(failureMessage);
+
+        // IMPORTANT:
+        // Do NOT clear payment state here.
+        return;
+      }
+
+      // ==========================================================
+      // 5. VERIFICATION SUCCESS
+      // ==========================================================
+
+      debugPrint('========================================');
+      debugPrint('PAYMENT VERIFIED SUCCESSFULLY');
+      debugPrint('========================================');
+
+      // ==========================================================
+      // 6. REFRESH COURSE DETAIL
+      // ==========================================================
+
+      await _initialData();
+
+      if (!mounted) return;
+
+      // ==========================================================
+      // 7. SHOW PAYMENT SUCCESS
+      // ==========================================================
+
       await _showPaymentSuccessDialog();
-    } catch (e) {
-      debugPrint('Payment processing error: $e');
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Payment successful, but access update failed.'),
-        ),
+      // ==========================================================
+      // 8. CLEAR PAYMENT STATE
+      // ==========================================================
+
+      provider.clearPaymentState();
+
+      debugPrint('PAYMENT FLOW COMPLETED');
+    } catch (e, stackTrace) {
+      debugPrint('========================================');
+      debugPrint('PAYMENT VERIFICATION ERROR');
+      debugPrint('Error: $e');
+      debugPrint('StackTrace: $stackTrace');
+      debugPrint('========================================');
+
+      if (!mounted) return;
+
+      _showPaymentError(
+        'Payment was received, but we could not confirm your payment. '
+        'Please contact support.',
       );
     }
   }
@@ -332,16 +436,20 @@ class _UserWebinarCourseDetailPageState
           final enrollmentStatusName = currentUser?.enrollmentStatusName ?? '';
           // Get data safely
           final resources =
-              userCourseProvider.userCourseMeterialListModel?.data;
+              userCourseProvider.userCourseMeterialListModel?.data ?? [];
 
           // recordings
           final recordings =
-              userCourseProvider.userWebinarRecordingsModel?.data;
+              userCourseProvider.userWebinarRecordingsModel?.data ?? [];
 
           // get available gate ways
           final paymentGateWays =
               paymentProvider.availablePaymentGateWaysModel?.data;
 
+          final bool hasResources = resources.isNotEmpty;
+          final bool hasRecordings = recordings.isNotEmpty;
+          final bool hasAnyContent = hasResources || hasRecordings;
+          print('hasAnyContent : : : $hasAnyContent');
           return LayoutBuilder(
             builder: (context, constraints) {
               final bool isTablet = constraints.maxWidth > 600;
@@ -349,6 +457,8 @@ class _UserWebinarCourseDetailPageState
                 onRefresh: () async {
                   await _initialData();
                 },
+                color: AppColor.gold,
+                backgroundColor: AppColor.background,
                 child:
                     (userCourseProvider.isLoading || course == null)
                         ? CourseDetailShimmer(isTablet: isTablet)
@@ -386,6 +496,12 @@ class _UserWebinarCourseDetailPageState
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
+
+                              const SizedBox(height: 16),
+                              // Payment Status
+                              if (course.isPaid?.toLowerCase() == 'true' &&
+                                  paymentStatusName.trim().isNotEmpty)
+                                _buildPaymentStatusTag(paymentStatusName),
 
                               const SizedBox(height: 16),
 
@@ -562,489 +678,1122 @@ class _UserWebinarCourseDetailPageState
                                     '${formatWebinarDuration(course?.startDateTime, course?.endDateTime)}',
                                 fullWidth: true,
                               ),
-
-                              // ================= RESOURCES =================
-                              const SizedBox(height: 30),
-                              Text(
-                                'Resources',
-                                style: TextStyle(
-                                  color: AppColor.ghostwhite,
-                                  fontSize: isTablet ? 22 : 20,
-                                  fontFamily: 'Urbanist',
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-                              (userCourseProvider.isLoadingListOfresource)
-                                  ? _ResourceShimmerWidget(isTablet: isTablet)
-                                  : (resources == null || resources.isEmpty)
-                                  ? Center(
-                                    child: Text(
-                                      'No resources available',
-                                      style: TextStyle(
-                                        color: AppColor.lightgray,
-                                        fontSize: isTablet ? 15 : 13,
-                                        fontFamily: 'Urbanist',
-                                      ),
+                              SizedBox(height: 24),
+                              // ================= RESOURCES / RECORDINGS TABS =================
+                              if (hasAnyContent) ...[
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: AppColor.formBorderColor.withOpacity(
+                                      0.14,
                                     ),
-                                  )
-                                  : Consumer2<
-                                    UserCourseProvider,
-                                    PermissionProvider
-                                  >(
-                                    builder: (
-                                      context,
-                                      userCourseProvider,
-                                      permissionProvider,
-                                      child,
-                                    ) {
-                                      final resources =
-                                          userCourseProvider
-                                              .userCourseMeterialListModel
-                                              ?.data ??
-                                          [];
-
-                                      if (userCourseProvider
-                                          .isLoadingListOfresource) {
-                                        return const Center(
-                                          child: CircularProgressIndicator(),
-                                        );
-                                      }
-
-                                      if (resources.isEmpty) {
-                                        return Center(
-                                          child: Text(
-                                            'No resources available',
-                                            style: TextStyle(
-                                              color: AppColor.ghostwhite,
-                                              fontFamily: 'Urbanist',
-                                            ),
-                                          ),
-                                        );
-                                      }
-
-                                      return ListView.separated(
-                                        shrinkWrap: true,
-                                        physics:
-                                            const NeverScrollableScrollPhysics(),
-                                        padding: EdgeInsets.zero,
-
-                                        itemCount: resources.length,
-
-                                        separatorBuilder: (context, index) {
-                                          return const SizedBox(height: 10);
-                                        },
-
-                                        itemBuilder: (context, index) {
-                                          final resource = resources[index];
-
-                                          final fileName =
-                                              resource.fileName ??
-                                              'resource.pdf';
-
-                                          final fileUrl = resource.fileUrl;
-
-                                          /// Check whether this resource is
-                                          /// currently downloading.
-                                          final isDownloading =
-                                              userCourseProvider
-                                                  .downloadingFileName ==
-                                              fileName;
-
-                                          return _ResourceWidget(
-                                            isTablet: isTablet,
-
-                                            title: fileName,
-
-                                            subtitle:
-                                                '${resource.fileType ?? 'PDF'} • '
-                                                '${formatFileSize(resource.fileSize)}',
-
-                                            icon: getFileIcon(
-                                              resources[index].fileType,
-                                            ),
-
-                                            isDownloading: isDownloading,
-
-                                            downloadProgress:
-                                                isDownloading
-                                                    ? userCourseProvider
-                                                        .downloadProgress
-                                                    : 0.0,
-                                            // Provider controls the index
-                                            isDeleting:
-                                                userCourseProvider
-                                                    .deletingIndex ==
-                                                index,
-                                            onTap: () async {
-                                              if (!permissionProvider
-                                                  .canViewMaterials) {
-                                                AppDialogHelper.showPermissionDeniedDialog(
-                                                  context: context,
-                                                  title: "Permission Required",
-                                                  message:
-                                                      "You don't have permission to View materials. Please contact your administrator.",
-                                                );
-                                                return;
-                                              }
-                                              if (fileUrl == null ||
-                                                  fileUrl.isEmpty) {
-                                                ScaffoldMessenger.of(
-                                                  context,
-                                                ).showSnackBar(
-                                                  const SnackBar(
-                                                    content: Text(
-                                                      'File URL is missing',
-                                                    ),
-                                                  ),
-                                                );
-
-                                                return;
-                                              }
-
-                                              // final result =
-                                              //     await trainerCourseProvider
-                                              //         .downloadResource(
-                                              //           url: fileUrl,
-                                              //           fileName: fileName,
-
-                                              //           // If required:
-                                              //           // token: authProvider.token,
-                                              //         );
-                                              Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder:
-                                                      (_) =>
-                                                          ResourceViewerScreen(
-                                                            fileUrl: fileUrl,
-                                                            fileName: fileName,
-                                                            fileType:
-                                                                resource
-                                                                    .fileType,
-                                                          ),
-                                                ),
-                                              );
-                                              // if (!context.mounted) {
-                                              //   return;
-                                              // }
-                                              // switch (result) {
-                                              //   case DownloadResult.success:
-                                              //     AppDialogHelper.showSuccessDialog(
-                                              //       context: context,
-                                              //       message:
-                                              //           '$fileName downloaded successfully.',
-                                              //       provider:
-                                              //           trainerCourseProvider,
-                                              //     );
-                                              //     break;
-
-                                              //   case DownloadResult.failed:
-                                              //     AppDialogHelper.showSuccessDialog(
-                                              //       context: context,
-                                              //       message:
-                                              //           'Failed to download $fileName.',
-                                              //       provider:
-                                              //           trainerCourseProvider,
-                                              //     );
-                                              //     break;
-
-                                              //   case DownloadResult
-                                              //       .alreadyDownloading:
-                                              //     ScaffoldMessenger.of(
-                                              //       context,
-                                              //     ).showSnackBar(
-                                              //       const SnackBar(
-                                              //         content: Text(
-                                              //           'Another file is currently downloading.',
-                                              //         ),
-                                              //       ),
-                                              //     );
-                                              //     break;
-                                              // }
-                                            },
-                                            onDelete: () async {
-                                              // print('delete');
-                                              // if (!permissionProvider
-                                              //     .canDeleteMaterials) {
-                                              //   if (!permissionProvider
-                                              //       .canDeleteMaterials) {
-                                              //     AppDialogHelper.showPermissionDeniedDialog(
-                                              //       context: context,
-                                              //       title:
-                                              //           "Permission Required",
-                                              //       message:
-                                              //           "You don't have permission to Delete materials. Please contact your administrator.",
-                                              //     );
-                                              //   }
-                                              //   return;
-                                              // }
-                                              // final provider =
-                                              //     userCourseProvider;
-
-                                              // await provider.deleteResourcePro(
-                                              //   courseId:
-                                              //       resource.id.toString(),
-                                              //   index: index,
-                                              // );
-
-                                              // if (!context.mounted) return;
-
-                                              // // Failure
-                                              // if (provider.failure != null) {
-                                              //   AppDialogHelper.showFailureDialog(
-                                              //     context: context,
-                                              //     failure: provider.failure,
-                                              //     provider: provider,
-                                              //     onTap: () {
-                                              //       provider.clearFailure();
-                                              //       Navigator.pop(context);
-                                              //     },
-                                              //   );
-                                              //   return;
-                                              // }
-
-                                              // // Success
-                                              // if (provider.success != null) {
-                                              //   AppDialogHelper.showSuccessDialog(
-                                              //     context: context,
-                                              //     message:
-                                              //         provider.success!.message,
-                                              //     provider: provider,
-                                              //     onTap: () {
-                                              //       // provider.clearFailure();
-                                              //       Navigator.pop(context);
-                                              //     },
-                                              //   );
-                                              //   // Refresh resource list after successful upload
-                                              //   await provider
-                                              //       .getCourseResourceListPro(
-                                              //         course.id.toString(),
-                                              //       );
-                                              //   // getCourseResourceListPro clears success,
-                                              //   // so set it again after refreshing.
-                                              //   provider.clearFailure();
-                                              // }
-                                            },
-                                          );
-                                        },
-                                      );
-                                    },
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: AppColor.formBorderColor
+                                          .withOpacity(0.20),
+                                    ),
                                   ),
-
-                              const SizedBox(height: 24),
-                              // ================= UPLOAD CONTENT =================
-                              Text(
-                                'Recordings',
-                                style: TextStyle(
-                                  color: AppColor.ghostwhite,
-                                  fontSize: isTablet ? 22 : 20,
-                                  fontFamily: 'Urbanist',
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-
-                              const SizedBox(height: 14),
-
-                              (userCourseProvider.isLoadingListOfRecordings)
-                                  ? webinarRecordingsShimmer()
-                                  : (recordings == null || recordings.isEmpty)
-                                  ? Center(
-                                    child: Text(
-                                      'No recordings available',
-                                      style: TextStyle(
-                                        color: AppColor.ghostwhite,
-                                        fontFamily: 'Urbanist',
-                                      ),
-                                    ),
-                                  )
-                                  : GridView.builder(
-                                    shrinkWrap: true,
-                                    physics:
-                                        const NeverScrollableScrollPhysics(),
-                                    padding: const EdgeInsets.all(0),
-                                    gridDelegate:
-                                        const SliverGridDelegateWithFixedCrossAxisCount(
-                                          crossAxisCount: 2,
-                                          crossAxisSpacing: 12,
-                                          mainAxisSpacing: 12,
-                                          childAspectRatio: 0.85,
-                                        ),
-                                    itemCount:
-                                        userCourseProvider
-                                            .userWebinarRecordingsModel
-                                            ?.data
-                                            ?.length ??
-                                        0,
-                                    itemBuilder: (context, index) {
-                                      final recording =
-                                          userCourseProvider
-                                              .userWebinarRecordingsModel
-                                              ?.data?[index];
-
-                                      return GestureDetector(
-                                        onTap: () async {
-                                          // Play recording here
-                                          if (!permissionProvider
-                                              .canViewWebinarRecordings) {
-                                            AppDialogHelper.showPermissionDeniedDialog(
-                                              context: context,
-                                              title: "Permission Required",
-                                              message:
-                                                  "You don't have permission to View materials. Please contact your administrator.",
-                                            );
-
-                                            return;
-                                          }
-                                          print(
-                                            'Recording URL: ${recording?.recordingUrl}',
-                                          );
-
-                                          await openNativePlayer(
-                                            videoUrl:
-                                                recording?.recordingUrl ?? '',
-                                            title: recording?.title ?? '',
-                                            recordingType:
-                                                recording?.recordingType ??
-                                                'mp4',
-                                          );
-                                          // Navigator.push(
-                                          //   context,
-                                          //   MaterialPageRoute(
-                                          //     builder:
-                                          //         (_) => GoogleDriveVideoPlayer(
-                                          //           videoUrl:
-                                          //               'https://drive.google.com/file/d/1sv1b60ZXWgM3mMHkP23h0NyTQAYzFCbQ/view',
-                                          //           title:
-                                          //               '${recording?.title ?? 'Recording'}',
-                                          //         ),
-                                          //   ),
-                                          // );
-                                        },
-                                        child: Container(
-                                          decoration: BoxDecoration(
-                                            gradient: LinearGradient(
-                                              colors: [
-                                                AppColor.formPrimaryColor
-                                                    .withOpacity(0.24),
-                                                AppColor.formSecondaryColor
-                                                    .withOpacity(0.24),
-                                              ],
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: GestureDetector(
+                                          onTap: () {
+                                            if (_selectedContentTab != 0) {
+                                              setState(() {
+                                                _selectedContentTab = 0;
+                                              });
+                                            }
+                                          },
+                                          child: AnimatedContainer(
+                                            duration: const Duration(
+                                              milliseconds: 200,
                                             ),
-                                            border: Border.all(
-                                              color: AppColor.formBorderColor
-                                                  .withOpacity(0.24),
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 12,
                                             ),
-                                            borderRadius: BorderRadius.circular(
-                                              10,
+                                            decoration: BoxDecoration(
+                                              color:
+                                                  _selectedContentTab == 0
+                                                      ? AppColor
+                                                          .formPrimaryColor
+                                                      : Colors.transparent,
+                                              borderRadius:
+                                                  BorderRadius.circular(9),
                                             ),
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: Colors.black.withOpacity(
-                                                  0.4,
+                                            child: Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                Icon(
+                                                  Icons.folder_outlined,
+                                                  size: isTablet ? 20 : 18,
+                                                  color:
+                                                      _selectedContentTab == 0
+                                                          ? Colors.white
+                                                          : AppColor.ghostwhite,
                                                 ),
-                                                offset: const Offset(0, 2),
-                                                blurRadius: 4,
-                                              ),
-                                            ],
-                                          ),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              // Video / Play area
-                                              Expanded(
-                                                child: Container(
-                                                  width: double.infinity,
-                                                  decoration: BoxDecoration(
+                                                const SizedBox(width: 8),
+                                                Text(
+                                                  'Resources',
+                                                  style: TextStyle(
                                                     color:
-                                                        AppColor
-                                                            .formBorderColor,
-                                                    borderRadius:
-                                                        const BorderRadius.vertical(
-                                                          top: Radius.circular(
-                                                            12,
-                                                          ),
-                                                        ),
-                                                  ),
-                                                  child: const Center(
-                                                    child: CircleAvatar(
-                                                      radius: 28,
-                                                      child: Icon(
-                                                        Icons.play_arrow,
-                                                        size: 32,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-
-                                              // Title
-                                              Padding(
-                                                padding: const EdgeInsets.all(
-                                                  12,
-                                                ),
-                                                child: Text(
-                                                  recording?.title ?? 'Forex',
-                                                  maxLines: 2,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: const TextStyle(
-                                                    color:
-                                                        AppColor.glassHighlight,
-                                                    fontSize: 15,
+                                                        _selectedContentTab == 0
+                                                            ? Colors.white
+                                                            : AppColor
+                                                                .ghostwhite,
+                                                    fontFamily: 'Urbanist',
+                                                    fontSize:
+                                                        isTablet ? 16 : 14,
                                                     fontWeight: FontWeight.w600,
                                                   ),
                                                 ),
-                                              ),
-                                            ],
+                                              ],
+                                            ),
                                           ),
                                         ),
-                                      );
-                                    },
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: GestureDetector(
+                                          onTap: () {
+                                            if (_selectedContentTab != 1) {
+                                              setState(() {
+                                                _selectedContentTab = 1;
+                                              });
+                                            }
+                                          },
+                                          child: AnimatedContainer(
+                                            duration: const Duration(
+                                              milliseconds: 200,
+                                            ),
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 12,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color:
+                                                  _selectedContentTab == 1
+                                                      ? AppColor
+                                                          .formPrimaryColor
+                                                      : Colors.transparent,
+                                              borderRadius:
+                                                  BorderRadius.circular(9),
+                                            ),
+                                            child: Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                Icon(
+                                                  Icons.video_library_outlined,
+                                                  size: isTablet ? 20 : 18,
+                                                  color:
+                                                      _selectedContentTab == 1
+                                                          ? Colors.white
+                                                          : AppColor.ghostwhite,
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Text(
+                                                  'Recordings',
+                                                  style: TextStyle(
+                                                    color:
+                                                        _selectedContentTab == 1
+                                                            ? Colors.white
+                                                            : AppColor
+                                                                .ghostwhite,
+                                                    fontFamily: 'Urbanist',
+                                                    fontSize:
+                                                        isTablet ? 16 : 14,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-
-                              const SizedBox(height: 36),
-                              const SizedBox(height: 16),
-
-                              Text(
-                                'Available Time Slots',
-                                style: TextStyle(
-                                  color: AppColor.ghostwhite,
-                                  fontSize: isTablet ? 22 : 20,
-                                  fontFamily: 'Urbanist',
-                                  fontWeight: FontWeight.w600,
                                 ),
-                              ),
+                                const SizedBox(height: 18),
+                                AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 200),
+                                  child:
+                                      _selectedContentTab == 0
+                                          ? KeyedSubtree(
+                                            key: const ValueKey(
+                                              'resources_tab',
+                                            ),
+                                            child: Column(
+                                              children: [
+                                                (userCourseProvider
+                                                        .isLoadingListOfresource)
+                                                    ? _ResourceShimmerWidget(
+                                                      isTablet: isTablet,
+                                                    )
+                                                    : (resources == null ||
+                                                        resources.isEmpty)
+                                                    ? Center(
+                                                      child: Text(
+                                                        'No resources available',
+                                                        style: TextStyle(
+                                                          color:
+                                                              AppColor
+                                                                  .ghostwhite,
+                                                          fontFamily:
+                                                              'Urbanist',
+                                                        ),
+                                                      ),
+                                                    )
+                                                    : Consumer2<
+                                                      UserCourseProvider,
+                                                      PermissionProvider
+                                                    >(
+                                                      builder: (
+                                                        context,
+                                                        userCourseProvider,
+                                                        permissionProvider,
+                                                        child,
+                                                      ) {
+                                                        final resources =
+                                                            userCourseProvider
+                                                                .userCourseMeterialListModel
+                                                                ?.data ??
+                                                            [];
 
-                              const SizedBox(height: 14),
+                                                        if (userCourseProvider
+                                                            .isLoadingListOfresource) {
+                                                          return const Center(
+                                                            child:
+                                                                CircularProgressIndicator(),
+                                                          );
+                                                        }
 
-                              _TimeSlotContainer(
-                                isTablet: isTablet,
-                                time: '10:00 AM - 11:00 AM',
-                                slotCount: 5,
-                              ),
+                                                        if (resources.isEmpty) {
+                                                          return Center(
+                                                            child: Text(
+                                                              'No resources available',
+                                                              style: TextStyle(
+                                                                color:
+                                                                    AppColor
+                                                                        .ghostwhite,
+                                                                fontFamily:
+                                                                    'Urbanist',
+                                                              ),
+                                                            ),
+                                                          );
+                                                        }
 
-                              const SizedBox(height: 10),
+                                                        return Column(
+                                                          children: [
+                                                            const SizedBox(
+                                                              height: 4,
+                                                            ),
+                                                            ListView.separated(
+                                                              shrinkWrap: true,
+                                                              physics:
+                                                                  const NeverScrollableScrollPhysics(),
+                                                              padding:
+                                                                  EdgeInsets
+                                                                      .zero,
 
-                              _TimeSlotContainer(
-                                isTablet: isTablet,
-                                time: '11:00 AM - 12:00 PM',
-                                slotCount: 8,
-                              ),
+                                                              itemCount:
+                                                                  resources
+                                                                      .length,
 
-                              const SizedBox(height: 10),
+                                                              separatorBuilder: (
+                                                                context,
+                                                                index,
+                                                              ) {
+                                                                return const SizedBox(
+                                                                  height: 10,
+                                                                );
+                                                              },
 
-                              _TimeSlotContainer(
-                                isTablet: isTablet,
-                                time: '12:00 PM - 01:00 PM',
-                                slotCount: 3,
-                              ),
+                                                              itemBuilder: (
+                                                                context,
+                                                                index,
+                                                              ) {
+                                                                final resource =
+                                                                    resources[index];
+
+                                                                final fileName =
+                                                                    resource
+                                                                        .fileName ??
+                                                                    'resource.pdf';
+
+                                                                final fileUrl =
+                                                                    resource
+                                                                        .fileUrl;
+
+                                                                /// Check whether this resource is
+                                                                /// currently downloading.
+                                                                final isDownloading =
+                                                                    userCourseProvider
+                                                                        .downloadingFileName ==
+                                                                    fileName;
+
+                                                                return _ResourceWidget(
+                                                                  isTablet:
+                                                                      isTablet,
+
+                                                                  title:
+                                                                      fileName,
+
+                                                                  subtitle:
+                                                                      '${resource.fileType ?? 'PDF'} • '
+                                                                      '${formatFileSize(resource.fileSize)}',
+
+                                                                  icon: getFileIcon(
+                                                                    resources[index]
+                                                                        .fileType,
+                                                                  ),
+
+                                                                  isDownloading:
+                                                                      isDownloading,
+
+                                                                  downloadProgress:
+                                                                      isDownloading
+                                                                          ? userCourseProvider
+                                                                              .downloadProgress
+                                                                          : 0.0,
+                                                                  // Provider controls the index
+                                                                  isDeleting:
+                                                                      userCourseProvider
+                                                                          .deletingIndex ==
+                                                                      index,
+                                                                  onTap: () async {
+                                                                    if (!permissionProvider
+                                                                        .canViewMaterials) {
+                                                                      AppDialogHelper.showPermissionDeniedDialog(
+                                                                        context:
+                                                                            context,
+                                                                        title:
+                                                                            "Permission Required",
+                                                                        message:
+                                                                            "You don't have permission to View materials. Please contact your administrator.",
+                                                                      );
+                                                                      return;
+                                                                    }
+                                                                    if (fileUrl ==
+                                                                            null ||
+                                                                        fileUrl
+                                                                            .isEmpty) {
+                                                                      ScaffoldMessenger.of(
+                                                                        context,
+                                                                      ).showSnackBar(
+                                                                        const SnackBar(
+                                                                          content: Text(
+                                                                            'File URL is missing',
+                                                                          ),
+                                                                        ),
+                                                                      );
+
+                                                                      return;
+                                                                    }
+
+                                                                    // final result =
+                                                                    //     await trainerCourseProvider
+                                                                    //         .downloadResource(
+                                                                    //           url: fileUrl,
+                                                                    //           fileName: fileName,
+
+                                                                    //           // If required:
+                                                                    //           // token: authProvider.token,
+                                                                    //         );
+                                                                    Navigator.push(
+                                                                      context,
+                                                                      MaterialPageRoute(
+                                                                        builder:
+                                                                            (
+                                                                              _,
+                                                                            ) => ResourceViewerScreen(
+                                                                              fileUrl:
+                                                                                  fileUrl,
+                                                                              fileName:
+                                                                                  fileName,
+                                                                              fileType:
+                                                                                  resource.fileType,
+                                                                            ),
+                                                                      ),
+                                                                    );
+                                                                    // if (!context.mounted) {
+                                                                    //   return;
+                                                                    // }
+                                                                    // switch (result) {
+                                                                    //   case DownloadResult.success:
+                                                                    //     AppDialogHelper.showSuccessDialog(
+                                                                    //       context: context,
+                                                                    //       message:
+                                                                    //           '$fileName downloaded successfully.',
+                                                                    //       provider:
+                                                                    //           trainerCourseProvider,
+                                                                    //     );
+                                                                    //     break;
+
+                                                                    //   case DownloadResult.failed:
+                                                                    //     AppDialogHelper.showSuccessDialog(
+                                                                    //       context: context,
+                                                                    //       message:
+                                                                    //           'Failed to download $fileName.',
+                                                                    //       provider:
+                                                                    //           trainerCourseProvider,
+                                                                    //     );
+                                                                    //     break;
+
+                                                                    //   case DownloadResult
+                                                                    //       .alreadyDownloading:
+                                                                    //     ScaffoldMessenger.of(
+                                                                    //       context,
+                                                                    //     ).showSnackBar(
+                                                                    //       const SnackBar(
+                                                                    //         content: Text(
+                                                                    //           'Another file is currently downloading.',
+                                                                    //         ),
+                                                                    //       ),
+                                                                    //     );
+                                                                    //     break;
+                                                                    // }
+                                                                  },
+                                                                  onDelete: () async {
+                                                                    // print('delete');
+                                                                    // if (!permissionProvider
+                                                                    //     .canDeleteMaterials) {
+                                                                    //   if (!permissionProvider
+                                                                    //       .canDeleteMaterials) {
+                                                                    //     AppDialogHelper.showPermissionDeniedDialog(
+                                                                    //       context: context,
+                                                                    //       title:
+                                                                    //           "Permission Required",
+                                                                    //       message:
+                                                                    //           "You don't have permission to Delete materials. Please contact your administrator.",
+                                                                    //     );
+                                                                    //   }
+                                                                    //   return;
+                                                                    // }
+                                                                    // final provider =
+                                                                    //     userCourseProvider;
+
+                                                                    // await provider.deleteResourcePro(
+                                                                    //   courseId:
+                                                                    //       resource.id.toString(),
+                                                                    //   index: index,
+                                                                    // );
+
+                                                                    // if (!context.mounted) return;
+
+                                                                    // // Failure
+                                                                    // if (provider.failure != null) {
+                                                                    //   AppDialogHelper.showFailureDialog(
+                                                                    //     context: context,
+                                                                    //     failure: provider.failure,
+                                                                    //     provider: provider,
+                                                                    //     onTap: () {
+                                                                    //       provider.clearFailure();
+                                                                    //       Navigator.pop(context);
+                                                                    //     },
+                                                                    //   );
+                                                                    //   return;
+                                                                    // }
+
+                                                                    // // Success
+                                                                    // if (provider.success != null) {
+                                                                    //   AppDialogHelper.showSuccessDialog(
+                                                                    //     context: context,
+                                                                    //     message:
+                                                                    //         provider.success!.message,
+                                                                    //     provider: provider,
+                                                                    //     onTap: () {
+                                                                    //       // provider.clearFailure();
+                                                                    //       Navigator.pop(context);
+                                                                    //     },
+                                                                    //   );
+                                                                    //   // Refresh resource list after successful upload
+                                                                    //   await provider
+                                                                    //       .getCourseResourceListPro(
+                                                                    //         course.id.toString(),
+                                                                    //       );
+                                                                    //   // getCourseResourceListPro clears success,
+                                                                    //   // so set it again after refreshing.
+                                                                    //   provider.clearFailure();
+                                                                    // }
+                                                                  },
+                                                                );
+                                                              },
+                                                            ),
+                                                          ],
+                                                        );
+                                                      },
+                                                    ),
+
+                                                const SizedBox(height: 24),
+                                              ],
+                                            ),
+                                          )
+                                          : KeyedSubtree(
+                                            key: const ValueKey(
+                                              'recordings_tab',
+                                            ),
+                                            child: Column(
+                                              children: [
+                                                (userCourseProvider
+                                                        .isLoadingListOfRecordings)
+                                                    ? webinarRecordingsShimmer()
+                                                    : (recordings == null ||
+                                                        recordings.isEmpty)
+                                                    ? Center(
+                                                      child: Text(
+                                                        'No recordings available',
+                                                        style: TextStyle(
+                                                          color:
+                                                              AppColor
+                                                                  .ghostwhite,
+                                                          fontFamily:
+                                                              'Urbanist',
+                                                        ),
+                                                      ),
+                                                    )
+                                                    : GridView.builder(
+                                                      shrinkWrap: true,
+                                                      physics:
+                                                          const NeverScrollableScrollPhysics(),
+                                                      padding:
+                                                          const EdgeInsets.all(
+                                                            0,
+                                                          ),
+                                                      gridDelegate:
+                                                          const SliverGridDelegateWithFixedCrossAxisCount(
+                                                            crossAxisCount: 2,
+                                                            crossAxisSpacing:
+                                                                12,
+                                                            mainAxisSpacing: 12,
+                                                            childAspectRatio:
+                                                                0.85,
+                                                          ),
+                                                      itemCount:
+                                                          userCourseProvider
+                                                              .userWebinarRecordingsModel
+                                                              ?.data
+                                                              ?.length ??
+                                                          0,
+                                                      itemBuilder: (
+                                                        context,
+                                                        index,
+                                                      ) {
+                                                        final recording =
+                                                            userCourseProvider
+                                                                .userWebinarRecordingsModel
+                                                                ?.data?[index];
+
+                                                        return GestureDetector(
+                                                          onTap: () async {
+                                                            // Play recording here
+                                                            if (!permissionProvider
+                                                                .canViewWebinarRecordings) {
+                                                              AppDialogHelper.showPermissionDeniedDialog(
+                                                                context:
+                                                                    context,
+                                                                title:
+                                                                    "Permission Required",
+                                                                message:
+                                                                    "You don't have permission to View materials. Please contact your administrator.",
+                                                              );
+
+                                                              return;
+                                                            }
+                                                            print(
+                                                              'Recording URL: ${recording?.recordingUrl}',
+                                                            );
+
+                                                            await openNativePlayer(
+                                                              videoUrl:
+                                                                  recording
+                                                                      ?.recordingUrl ??
+                                                                  '',
+                                                              title:
+                                                                  recording
+                                                                      ?.title ??
+                                                                  '',
+                                                              recordingType:
+                                                                  recording
+                                                                      ?.recordingType ??
+                                                                  'mp4',
+                                                            );
+                                                            // Navigator.push(
+                                                            //   context,
+                                                            //   MaterialPageRoute(
+                                                            //     builder:
+                                                            //         (_) => GoogleDriveVideoPlayer(
+                                                            //           videoUrl:
+                                                            //               'https://drive.google.com/file/d/1sv1b60ZXWgM3mMHkP23h0NyTQAYzFCbQ/view',
+                                                            //           title:
+                                                            //               '${recording?.title ?? 'Recording'}',
+                                                            //         ),
+                                                            //   ),
+                                                            // );
+                                                          },
+                                                          child: Container(
+                                                            decoration: BoxDecoration(
+                                                              gradient: LinearGradient(
+                                                                colors: [
+                                                                  AppColor
+                                                                      .formPrimaryColor
+                                                                      .withOpacity(
+                                                                        0.24,
+                                                                      ),
+                                                                  AppColor
+                                                                      .formSecondaryColor
+                                                                      .withOpacity(
+                                                                        0.24,
+                                                                      ),
+                                                                ],
+                                                              ),
+                                                              border: Border.all(
+                                                                color: AppColor
+                                                                    .formBorderColor
+                                                                    .withOpacity(
+                                                                      0.24,
+                                                                    ),
+                                                              ),
+                                                              borderRadius:
+                                                                  BorderRadius.circular(
+                                                                    10,
+                                                                  ),
+                                                              boxShadow: [
+                                                                BoxShadow(
+                                                                  color: Colors
+                                                                      .black
+                                                                      .withOpacity(
+                                                                        0.4,
+                                                                      ),
+                                                                  offset:
+                                                                      const Offset(
+                                                                        0,
+                                                                        2,
+                                                                      ),
+                                                                  blurRadius: 4,
+                                                                ),
+                                                              ],
+                                                            ),
+                                                            child: Column(
+                                                              crossAxisAlignment:
+                                                                  CrossAxisAlignment
+                                                                      .start,
+                                                              children: [
+                                                                // Video / Play area
+                                                                Expanded(
+                                                                  child: Container(
+                                                                    width:
+                                                                        double
+                                                                            .infinity,
+                                                                    decoration: BoxDecoration(
+                                                                      color:
+                                                                          AppColor
+                                                                              .formBorderColor,
+                                                                      borderRadius:
+                                                                          const BorderRadius.vertical(
+                                                                            top: Radius.circular(
+                                                                              12,
+                                                                            ),
+                                                                          ),
+                                                                    ),
+                                                                    child: const Center(
+                                                                      child: CircleAvatar(
+                                                                        radius:
+                                                                            28,
+                                                                        child: Icon(
+                                                                          Icons
+                                                                              .play_arrow,
+                                                                          size:
+                                                                              32,
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                ),
+
+                                                                // Title
+                                                                Padding(
+                                                                  padding:
+                                                                      const EdgeInsets.all(
+                                                                        12,
+                                                                      ),
+                                                                  child: Text(
+                                                                    recording
+                                                                            ?.title ??
+                                                                        'Forex',
+                                                                    maxLines: 2,
+                                                                    overflow:
+                                                                        TextOverflow
+                                                                            .ellipsis,
+                                                                    style: const TextStyle(
+                                                                      color:
+                                                                          AppColor
+                                                                              .glassHighlight,
+                                                                      fontSize:
+                                                                          15,
+                                                                      fontWeight:
+                                                                          FontWeight
+                                                                              .w600,
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                          ),
+                                                        );
+                                                      },
+                                                    ),
+                                              ],
+                                            ),
+                                          ),
+                                ),
+                              ],
+
+                              // // ================= RESOURCES =================
+                              // const SizedBox(height: 30),
+                              // Text(
+                              //   'Resources',
+                              //   style: TextStyle(
+                              //     color: AppColor.ghostwhite,
+                              //     fontSize: isTablet ? 22 : 20,
+                              //     fontFamily: 'Urbanist',
+                              //     fontWeight: FontWeight.w600,
+                              //   ),
+                              // ),
+                              // const SizedBox(height: 14),
+                              // (userCourseProvider.isLoadingListOfresource)
+                              //     ? _ResourceShimmerWidget(isTablet: isTablet)
+                              //     : (resources == null || resources.isEmpty)
+                              //     ? Center(
+                              //       child: Text(
+                              //         'No resources available',
+                              //         style: TextStyle(
+                              //           color: AppColor.lightgray,
+                              //           fontSize: isTablet ? 15 : 13,
+                              //           fontFamily: 'Urbanist',
+                              //         ),
+                              //       ),
+                              //     )
+                              //     : Consumer2<
+                              //       UserCourseProvider,
+                              //       PermissionProvider
+                              //     >(
+                              //       builder: (
+                              //         context,
+                              //         userCourseProvider,
+                              //         permissionProvider,
+                              //         child,
+                              //       ) {
+                              //         final resources =
+                              //             userCourseProvider
+                              //                 .userCourseMeterialListModel
+                              //                 ?.data ??
+                              //             [];
+
+                              //         if (userCourseProvider
+                              //             .isLoadingListOfresource) {
+                              //           return const Center(
+                              //             child: CircularProgressIndicator(),
+                              //           );
+                              //         }
+
+                              //         if (resources.isEmpty) {
+                              //           return Center(
+                              //             child: Text(
+                              //               'No resources available',
+                              //               style: TextStyle(
+                              //                 color: AppColor.ghostwhite,
+                              //                 fontFamily: 'Urbanist',
+                              //               ),
+                              //             ),
+                              //           );
+                              //         }
+
+                              //         return ListView.separated(
+                              //           shrinkWrap: true,
+                              //           physics:
+                              //               const NeverScrollableScrollPhysics(),
+                              //           padding: EdgeInsets.zero,
+
+                              //           itemCount: resources.length,
+
+                              //           separatorBuilder: (context, index) {
+                              //             return const SizedBox(height: 10);
+                              //           },
+
+                              //           itemBuilder: (context, index) {
+                              //             final resource = resources[index];
+
+                              //             final fileName =
+                              //                 resource.fileName ??
+                              //                 'resource.pdf';
+
+                              //             final fileUrl = resource.fileUrl;
+
+                              //             /// Check whether this resource is
+                              //             /// currently downloading.
+                              //             final isDownloading =
+                              //                 userCourseProvider
+                              //                     .downloadingFileName ==
+                              //                 fileName;
+
+                              //             return _ResourceWidget(
+                              //               isTablet: isTablet,
+
+                              //               title: fileName,
+
+                              //               subtitle:
+                              //                   '${resource.fileType ?? 'PDF'} • '
+                              //                   '${formatFileSize(resource.fileSize)}',
+
+                              //               icon: getFileIcon(
+                              //                 resources[index].fileType,
+                              //               ),
+
+                              //               isDownloading: isDownloading,
+
+                              //               downloadProgress:
+                              //                   isDownloading
+                              //                       ? userCourseProvider
+                              //                           .downloadProgress
+                              //                       : 0.0,
+                              //               // Provider controls the index
+                              //               isDeleting:
+                              //                   userCourseProvider
+                              //                       .deletingIndex ==
+                              //                   index,
+                              //               onTap: () async {
+                              //                 if (!permissionProvider
+                              //                     .canViewMaterials) {
+                              //                   AppDialogHelper.showPermissionDeniedDialog(
+                              //                     context: context,
+                              //                     title: "Permission Required",
+                              //                     message:
+                              //                         "You don't have permission to View materials. Please contact your administrator.",
+                              //                   );
+                              //                   return;
+                              //                 }
+                              //                 if (fileUrl == null ||
+                              //                     fileUrl.isEmpty) {
+                              //                   ScaffoldMessenger.of(
+                              //                     context,
+                              //                   ).showSnackBar(
+                              //                     const SnackBar(
+                              //                       content: Text(
+                              //                         'File URL is missing',
+                              //                       ),
+                              //                     ),
+                              //                   );
+
+                              //                   return;
+                              //                 }
+
+                              //                 // final result =
+                              //                 //     await trainerCourseProvider
+                              //                 //         .downloadResource(
+                              //                 //           url: fileUrl,
+                              //                 //           fileName: fileName,
+
+                              //                 //           // If required:
+                              //                 //           // token: authProvider.token,
+                              //                 //         );
+                              //                 Navigator.push(
+                              //                   context,
+                              //                   MaterialPageRoute(
+                              //                     builder:
+                              //                         (_) =>
+                              //                             ResourceViewerScreen(
+                              //                               fileUrl: fileUrl,
+                              //                               fileName: fileName,
+                              //                               fileType:
+                              //                                   resource
+                              //                                       .fileType,
+                              //                             ),
+                              //                   ),
+                              //                 );
+                              //                 // if (!context.mounted) {
+                              //                 //   return;
+                              //                 // }
+                              //                 // switch (result) {
+                              //                 //   case DownloadResult.success:
+                              //                 //     AppDialogHelper.showSuccessDialog(
+                              //                 //       context: context,
+                              //                 //       message:
+                              //                 //           '$fileName downloaded successfully.',
+                              //                 //       provider:
+                              //                 //           trainerCourseProvider,
+                              //                 //     );
+                              //                 //     break;
+
+                              //                 //   case DownloadResult.failed:
+                              //                 //     AppDialogHelper.showSuccessDialog(
+                              //                 //       context: context,
+                              //                 //       message:
+                              //                 //           'Failed to download $fileName.',
+                              //                 //       provider:
+                              //                 //           trainerCourseProvider,
+                              //                 //     );
+                              //                 //     break;
+
+                              //                 //   case DownloadResult
+                              //                 //       .alreadyDownloading:
+                              //                 //     ScaffoldMessenger.of(
+                              //                 //       context,
+                              //                 //     ).showSnackBar(
+                              //                 //       const SnackBar(
+                              //                 //         content: Text(
+                              //                 //           'Another file is currently downloading.',
+                              //                 //         ),
+                              //                 //       ),
+                              //                 //     );
+                              //                 //     break;
+                              //                 // }
+                              //               },
+                              //               onDelete: () async {
+                              //                 // print('delete');
+                              //                 // if (!permissionProvider
+                              //                 //     .canDeleteMaterials) {
+                              //                 //   if (!permissionProvider
+                              //                 //       .canDeleteMaterials) {
+                              //                 //     AppDialogHelper.showPermissionDeniedDialog(
+                              //                 //       context: context,
+                              //                 //       title:
+                              //                 //           "Permission Required",
+                              //                 //       message:
+                              //                 //           "You don't have permission to Delete materials. Please contact your administrator.",
+                              //                 //     );
+                              //                 //   }
+                              //                 //   return;
+                              //                 // }
+                              //                 // final provider =
+                              //                 //     userCourseProvider;
+
+                              //                 // await provider.deleteResourcePro(
+                              //                 //   courseId:
+                              //                 //       resource.id.toString(),
+                              //                 //   index: index,
+                              //                 // );
+
+                              //                 // if (!context.mounted) return;
+
+                              //                 // // Failure
+                              //                 // if (provider.failure != null) {
+                              //                 //   AppDialogHelper.showFailureDialog(
+                              //                 //     context: context,
+                              //                 //     failure: provider.failure,
+                              //                 //     provider: provider,
+                              //                 //     onTap: () {
+                              //                 //       provider.clearFailure();
+                              //                 //       Navigator.pop(context);
+                              //                 //     },
+                              //                 //   );
+                              //                 //   return;
+                              //                 // }
+
+                              //                 // // Success
+                              //                 // if (provider.success != null) {
+                              //                 //   AppDialogHelper.showSuccessDialog(
+                              //                 //     context: context,
+                              //                 //     message:
+                              //                 //         provider.success!.message,
+                              //                 //     provider: provider,
+                              //                 //     onTap: () {
+                              //                 //       // provider.clearFailure();
+                              //                 //       Navigator.pop(context);
+                              //                 //     },
+                              //                 //   );
+                              //                 //   // Refresh resource list after successful upload
+                              //                 //   await provider
+                              //                 //       .getCourseResourceListPro(
+                              //                 //         course.id.toString(),
+                              //                 //       );
+                              //                 //   // getCourseResourceListPro clears success,
+                              //                 //   // so set it again after refreshing.
+                              //                 //   provider.clearFailure();
+                              //                 // }
+                              //               },
+                              //             );
+                              //           },
+                              //         );
+                              //       },
+                              //     ),
+
+                              // const SizedBox(height: 24),
+                              // // ================= UPLOAD CONTENT =================
+                              // Text(
+                              //   'Recordings',
+                              //   style: TextStyle(
+                              //     color: AppColor.ghostwhite,
+                              //     fontSize: isTablet ? 22 : 20,
+                              //     fontFamily: 'Urbanist',
+                              //     fontWeight: FontWeight.w600,
+                              //   ),
+                              // ),
+
+                              // const SizedBox(height: 14),
+
+                              // (userCourseProvider.isLoadingListOfRecordings)
+                              //     ? webinarRecordingsShimmer()
+                              //     : (recordings == null || recordings.isEmpty)
+                              //     ? Center(
+                              //       child: Text(
+                              //         'No recordings available',
+                              //         style: TextStyle(
+                              //           color: AppColor.ghostwhite,
+                              //           fontFamily: 'Urbanist',
+                              //         ),
+                              //       ),
+                              //     )
+                              //     : GridView.builder(
+                              //       shrinkWrap: true,
+                              //       physics:
+                              //           const NeverScrollableScrollPhysics(),
+                              //       padding: const EdgeInsets.all(0),
+                              //       gridDelegate:
+                              //           const SliverGridDelegateWithFixedCrossAxisCount(
+                              //             crossAxisCount: 2,
+                              //             crossAxisSpacing: 12,
+                              //             mainAxisSpacing: 12,
+                              //             childAspectRatio: 0.85,
+                              //           ),
+                              //       itemCount:
+                              //           userCourseProvider
+                              //               .userWebinarRecordingsModel
+                              //               ?.data
+                              //               ?.length ??
+                              //           0,
+                              //       itemBuilder: (context, index) {
+                              //         final recording =
+                              //             userCourseProvider
+                              //                 .userWebinarRecordingsModel
+                              //                 ?.data?[index];
+
+                              //         return GestureDetector(
+                              //           onTap: () async {
+                              //             // Play recording here
+                              //             if (!permissionProvider
+                              //                 .canViewWebinarRecordings) {
+                              //               AppDialogHelper.showPermissionDeniedDialog(
+                              //                 context: context,
+                              //                 title: "Permission Required",
+                              //                 message:
+                              //                     "You don't have permission to View materials. Please contact your administrator.",
+                              //               );
+
+                              //               return;
+                              //             }
+                              //             print(
+                              //               'Recording URL: ${recording?.recordingUrl}',
+                              //             );
+
+                              //             await openNativePlayer(
+                              //               videoUrl:
+                              //                   recording?.recordingUrl ?? '',
+                              //               title: recording?.title ?? '',
+                              //               recordingType:
+                              //                   recording?.recordingType ??
+                              //                   'mp4',
+                              //             );
+                              //             // Navigator.push(
+                              //             //   context,
+                              //             //   MaterialPageRoute(
+                              //             //     builder:
+                              //             //         (_) => GoogleDriveVideoPlayer(
+                              //             //           videoUrl:
+                              //             //               'https://drive.google.com/file/d/1sv1b60ZXWgM3mMHkP23h0NyTQAYzFCbQ/view',
+                              //             //           title:
+                              //             //               '${recording?.title ?? 'Recording'}',
+                              //             //         ),
+                              //             //   ),
+                              //             // );
+                              //           },
+                              //           child: Container(
+                              //             decoration: BoxDecoration(
+                              //               gradient: LinearGradient(
+                              //                 colors: [
+                              //                   AppColor.formPrimaryColor
+                              //                       .withOpacity(0.24),
+                              //                   AppColor.formSecondaryColor
+                              //                       .withOpacity(0.24),
+                              //                 ],
+                              //               ),
+                              //               border: Border.all(
+                              //                 color: AppColor.formBorderColor
+                              //                     .withOpacity(0.24),
+                              //               ),
+                              //               borderRadius: BorderRadius.circular(
+                              //                 10,
+                              //               ),
+                              //               boxShadow: [
+                              //                 BoxShadow(
+                              //                   color: Colors.black.withOpacity(
+                              //                     0.4,
+                              //                   ),
+                              //                   offset: const Offset(0, 2),
+                              //                   blurRadius: 4,
+                              //                 ),
+                              //               ],
+                              //             ),
+                              //             child: Column(
+                              //               crossAxisAlignment:
+                              //                   CrossAxisAlignment.start,
+                              //               children: [
+                              //                 // Video / Play area
+                              //                 Expanded(
+                              //                   child: Container(
+                              //                     width: double.infinity,
+                              //                     decoration: BoxDecoration(
+                              //                       color:
+                              //                           AppColor
+                              //                               .formBorderColor,
+                              //                       borderRadius:
+                              //                           const BorderRadius.vertical(
+                              //                             top: Radius.circular(
+                              //                               12,
+                              //                             ),
+                              //                           ),
+                              //                     ),
+                              //                     child: const Center(
+                              //                       child: CircleAvatar(
+                              //                         radius: 28,
+                              //                         child: Icon(
+                              //                           Icons.play_arrow,
+                              //                           size: 32,
+                              //                         ),
+                              //                       ),
+                              //                     ),
+                              //                   ),
+                              //                 ),
+
+                              //                 // Title
+                              //                 Padding(
+                              //                   padding: const EdgeInsets.all(
+                              //                     12,
+                              //                   ),
+                              //                   child: Text(
+                              //                     recording?.title ?? 'Forex',
+                              //                     maxLines: 2,
+                              //                     overflow:
+                              //                         TextOverflow.ellipsis,
+                              //                     style: const TextStyle(
+                              //                       color:
+                              //                           AppColor.glassHighlight,
+                              //                       fontSize: 15,
+                              //                       fontWeight: FontWeight.w600,
+                              //                     ),
+                              //                   ),
+                              //                 ),
+                              //               ],
+                              //             ),
+                              //           ),
+                              //         );
+                              //       },
+                              //     ),
                               const SizedBox(height: 36),
 
                               // Join button
                               CommonCustomeButtonWidget(
-                                isTablet: isTablet,
+                                isTablet: false,
                                 text:
                                     userCourseProvider.isLoadingJoinData
                                         ? 'Please wait...'
@@ -1057,6 +1806,46 @@ class _UserWebinarCourseDetailPageState
                                         ? null
                                         : () async {
                                           try {
+                                            if (canPay == true) {
+                                              // inside this create order
+
+                                              showPaymentGatewayBottomSheet(
+                                                context: context,
+                                                gateways: paymentGateWays ?? [],
+
+                                                // IMPORTANT:
+                                                // This should be the actual webinar ID,
+                                                // not courseId unless they are the same in your API.
+                                                webinarId:
+                                                    int.tryParse(
+                                                      widget.courseId
+                                                          .toString(),
+                                                    ) ??
+                                                    0,
+
+                                                amount:
+                                                    double.tryParse(
+                                                      course.price
+                                                              ?.toString() ??
+                                                          '0',
+                                                    ) ??
+                                                    0,
+
+                                                name: '${course.title}',
+
+                                                description:
+                                                    course.description ??
+                                                    'Webinar Registration',
+
+                                                razorpayService:
+                                                    _razorpayService,
+
+                                                paymentProvider:
+                                                    paymentProvider,
+                                              );
+
+                                              return;
+                                            }
                                             await userCourseProvider
                                                 .userJoinDataPro(
                                                   widget.courseId.toString(),
@@ -1077,18 +1866,39 @@ class _UserWebinarCourseDetailPageState
                                                       ?.meetingUrl ??
                                                   '';
 
-                                              if (meetingUrl.isEmpty) {
-                                                ScaffoldMessenger.of(
-                                                  context,
-                                                ).showSnackBar(
-                                                  const SnackBar(
-                                                    content: Text(
-                                                      'Unable to open the webinar. Meeting link not found.',
-                                                    ),
-                                                  ),
-                                                );
-                                                return;
-                                              }
+                                              final meetingIdApi =
+                                                  userCourseProvider
+                                                      .userJoinWebinarModel
+                                                      ?.data
+                                                      ?.meetingId ??
+                                                  '';
+
+                                              final meetingPassApi =
+                                                  userCourseProvider
+                                                      .userJoinWebinarModel
+                                                      ?.data
+                                                      ?.meetingPassword ??
+                                                  '';
+
+                                              final meetingJwtApi =
+                                                  userCourseProvider
+                                                      .userJoinWebinarModel
+                                                      ?.data
+                                                      ?.sdkJwt ??
+                                                  '';
+
+                                              // if (meetingUrl.isEmpty) {
+                                              //   ScaffoldMessenger.of(
+                                              //     context,
+                                              //   ).showSnackBar(
+                                              //     const SnackBar(
+                                              //       content: Text(
+                                              //         'Unable to open the webinar. Meeting link not found.',
+                                              //       ),
+                                              //     ),
+                                              //   );
+                                              //   return;
+                                              // }
 
                                               // await userCourseProvider
                                               //     .launchZoomMeeting(
@@ -1098,9 +1908,11 @@ class _UserWebinarCourseDetailPageState
                                               // YOUR ZOOM URL
                                               // =====================================================
 
-                                              const zoomUrl =
-                                                  "https://app.zoom.us/wc/81150519342/start?fromPWA=1&pwd=fnYCVNOw1pF5WRdU3uQWDRX69ZBo5x.1";
+                                              // const zoomUrl =
+                                              //     "https://app.zoom.us/wc/84228660846/start?fromPWA=1&pwd=3KNfc1lTxRv8XHK6rxuHSyvGiRH0Xa.1";
 
+                                              const zoomUrl =
+                                                  "https://us05web.zoom.us/j/85663818907?pwd=E2qEiJtJlZWojWsviYh7s5M7XCHF1h.1";
                                               final zoomData = parseZoomUrl(
                                                 zoomUrl,
                                               );
@@ -1137,6 +1949,15 @@ class _UserWebinarCourseDetailPageState
                                               //       '${zoomData.meetingNumber}',
                                               // );
 
+                                              // final jwt = generateZoomJwt(
+                                              //   clientId:
+                                              //       "ThCVsAiWRSag9kEVQbzZiw",
+                                              //   clientSecret:
+                                              //       "eE47oI40X2hU8vIjs8iY1hWvjaCF9Y39",
+                                              //   meetingNumber:
+                                              //       '${zoomData.meetingNumber}',
+                                              // );
+
                                               final jwt = generateZoomJwt(
                                                 clientId:
                                                     "ThCVsAiWRSag9kEVQbzZiw",
@@ -1147,7 +1968,7 @@ class _UserWebinarCourseDetailPageState
                                               );
 
                                               debugPrint(
-                                                "Zoom Meeting ID: ${zoomData.meetingNumber}",
+                                                "Zoom Meeting ID : ${zoomData.meetingNumber}",
                                               );
 
                                               debugPrint(
@@ -1167,14 +1988,28 @@ class _UserWebinarCourseDetailPageState
                                                       "joinZoomMeeting",
                                                       {
                                                         "meetingNumber":
-                                                            zoomData
-                                                                .meetingNumber,
+                                                            '${meetingIdApi}',
                                                         "meetingPassword":
-                                                            zoomData.password,
+                                                            '${meetingPassApi}',
                                                         "userName": userName,
-                                                        "jwt": jwt,
+                                                        "jwt": meetingJwtApi,
                                                       },
                                                     );
+
+                                                // final bool? result =
+                                                //     await zoomPlatform
+                                                //         .invokeMethod<bool>(
+                                                //           "joinZoomMeeting",
+                                                //           {
+                                                //             "meetingNumber":
+                                                //                 meetingIdApi,
+                                                //             "meetingPassword":
+                                                //                 meetingPassApi,
+                                                //             "userName":
+                                                //                 userName,
+                                                //             "jwt": jwt,
+                                                //           },
+                                                //         );
 
                                                 if (!mounted) {
                                                   return;
@@ -1223,20 +2058,23 @@ class _UserWebinarCourseDetailPageState
                                                   userCourseProvider
                                                       .failure
                                                       ?.message
-                                                      .toString();
+                                                      ?.toString() ??
+                                                  '';
+                                              final lowerMessage =
+                                                  failureMessage.toLowerCase();
                                               debugPrint(
                                                 'Join API Failure: $failureMessage',
                                               );
                                               if (canPay == true) {
-                                                if (failureMessage!
-                                                        .toLowerCase()
-                                                        .contains('Payment') ||
-                                                    failureMessage!
-                                                        .toLowerCase()
-                                                        .contains('pay') ||
-                                                    failureMessage!
-                                                        .toLowerCase()
-                                                        .contains('enroll')) {
+                                                if (lowerMessage.contains(
+                                                      'payment',
+                                                    ) ||
+                                                    lowerMessage.contains(
+                                                      'pay',
+                                                    ) ||
+                                                    lowerMessage.contains(
+                                                      'enroll',
+                                                    )) {
                                                   // inside this create order
 
                                                   showPaymentGatewayBottomSheet(
@@ -1315,6 +2153,325 @@ class _UserWebinarCourseDetailPageState
                                         },
                               ),
 
+                              // // Join button
+                              // CommonCustomeButtonWidget(
+                              //   isTablet: isTablet,
+                              //   text:
+                              //       userCourseProvider.isLoadingJoinData
+                              //           ? 'Please wait...'
+                              //           : canPay
+                              //           ? 'Pay Now'
+                              //           : 'Join',
+
+                              //   onTap:
+                              //       userCourseProvider.isLoadingJoinData
+                              //           ? null
+                              //           : () async {
+                              //             try {
+                              //               await userCourseProvider
+                              //                   .userJoinDataPro(
+                              //                     widget.courseId.toString(),
+                              //                     '2',
+                              //                   );
+                              //               print(
+                              //                 'Join Webinar Result: ${userCourseProvider.success}',
+                              //               );
+                              //               if (!mounted) return;
+
+                              //               if (userCourseProvider
+                              //                       .userJoinWebinarModel !=
+                              //                   null) {
+                              //                 final meetingUrl =
+                              //                     userCourseProvider
+                              //                         .userJoinWebinarModel
+                              //                         ?.data
+                              //                         ?.meetingUrl ??
+                              //                     '';
+
+                              //                 final meetingIdApi =
+                              //                     userCourseProvider
+                              //                         .userJoinWebinarModel
+                              //                         ?.data
+                              //                         ?.meetingId ??
+                              //                     '';
+
+                              //                 final meetingPassApi =
+                              //                     userCourseProvider
+                              //                         .userJoinWebinarModel
+                              //                         ?.data
+                              //                         ?.meetingPassword ??
+                              //                     '';
+
+                              //                 final meetingJwtApi =
+                              //                     userCourseProvider
+                              //                         .userJoinWebinarModel
+                              //                         ?.data
+                              //                         ?.sdkJwt ??
+                              //                     '';
+
+                              //                 // if (meetingUrl.isEmpty) {
+                              //                 //   ScaffoldMessenger.of(
+                              //                 //     context,
+                              //                 //   ).showSnackBar(
+                              //                 //     const SnackBar(
+                              //                 //       content: Text(
+                              //                 //         'Unable to open the webinar. Meeting link not found.',
+                              //                 //       ),
+                              //                 //     ),
+                              //                 //   );
+                              //                 //   return;
+                              //                 // }
+
+                              //                 // await userCourseProvider
+                              //                 //     .launchZoomMeeting(
+                              //                 //       meetingUrl,
+                              //                 //     );
+                              //                 // =====================================================
+                              //                 // YOUR ZOOM URL
+                              //                 // =====================================================
+
+                              //                 // const zoomUrl =
+                              //                 //     "https://app.zoom.us/wc/84228660846/start?fromPWA=1&pwd=3KNfc1lTxRv8XHK6rxuHSyvGiRH0Xa.1";
+
+                              //                 const zoomUrl =
+                              //                     "https://us05web.zoom.us/j/85663818907?pwd=E2qEiJtJlZWojWsviYh7s5M7XCHF1h.1";
+                              //                 final zoomData = parseZoomUrl(
+                              //                   zoomUrl,
+                              //                 );
+
+                              //                 // =====================================================
+                              //                 // VALIDATE MEETING ID
+                              //                 // =====================================================
+
+                              //                 if (zoomData
+                              //                     .meetingNumber
+                              //                     .isEmpty) {
+                              //                   debugPrint(
+                              //                     "Zoom Meeting ID not found",
+                              //                   );
+                              //                   return;
+                              //                 }
+
+                              //                 // =====================================================
+                              //                 // USER NAME
+                              //                 // =====================================================
+
+                              //                 const userName = "Test Student";
+
+                              //                 // =====================================================
+                              //                 // GENERATE ZOOM MEETING SDK JWT
+                              //                 // =====================================================
+
+                              //                 // final jwt = generateZoomJwt(
+                              //                 //   clientId:
+                              //                 //       "0qw_HEqbTJSsU1wSbPThw",
+                              //                 //   clientSecret:
+                              //                 //       "Fh1lhH5qMVbFHHOrFACJMf3CrcRRGtEu",
+                              //                 //   meetingNumber:
+                              //                 //       '${zoomData.meetingNumber}',
+                              //                 // );
+
+                              //                 // final jwt = generateZoomJwt(
+                              //                 //   clientId:
+                              //                 //       "ThCVsAiWRSag9kEVQbzZiw",
+                              //                 //   clientSecret:
+                              //                 //       "eE47oI40X2hU8vIjs8iY1hWvjaCF9Y39",
+                              //                 //   meetingNumber:
+                              //                 //       '${zoomData.meetingNumber}',
+                              //                 // );
+
+                              //                 final jwt = generateZoomJwt(
+                              //                   clientId:
+                              //                       "ThCVsAiWRSag9kEVQbzZiw",
+                              //                   clientSecret:
+                              //                       "eE47oI40X2hU8vIjs8iY1hWvjaCF9Y39",
+                              //                   meetingNumber:
+                              //                       '${zoomData.meetingNumber}',
+                              //                 );
+
+                              //                 debugPrint(
+                              //                   "Zoom Meeting ID : ${zoomData.meetingNumber}",
+                              //                 );
+
+                              //                 debugPrint(
+                              //                   "Zoom Password: ${zoomData.password}",
+                              //                 );
+
+                              //                 debugPrint("jwt print: $jwt");
+
+                              //                 // =====================================================
+                              //                 // SEND TO ANDROID
+                              //                 // =====================================================
+
+                              //                 try {
+                              //                   final bool?
+                              //                   result = await zoomPlatform
+                              //                       .invokeMethod<bool>(
+                              //                         "joinZoomMeeting",
+                              //                         {
+                              //                           "meetingNumber":
+                              //                               zoomData
+                              //                                   .meetingNumber,
+                              //                           "meetingPassword":
+                              //                               zoomData.password,
+                              //                           "userName": userName,
+                              //                           "jwt": jwt,
+                              //                         },
+                              //                       );
+
+                              //                   // final bool? result =
+                              //                   //     await zoomPlatform
+                              //                   //         .invokeMethod<bool>(
+                              //                   //           "joinZoomMeeting",
+                              //                   //           {
+                              //                   //             "meetingNumber":
+                              //                   //                 meetingIdApi,
+                              //                   //             "meetingPassword":
+                              //                   //                 meetingPassApi,
+                              //                   //             "userName":
+                              //                   //                 userName,
+                              //                   //             "jwt": jwt,
+                              //                   //           },
+                              //                   //         );
+
+                              //                   if (!mounted) {
+                              //                     return;
+                              //                   }
+
+                              //                   debugPrint(
+                              //                     "Zoom finished. Result = $result",
+                              //                   );
+
+                              //                   // Refresh the Detail Page after returning from Zoom.
+                              //                   await _initialData();
+
+                              //                   if (!mounted) {
+                              //                     return;
+                              //                   }
+
+                              //                   setState(() {});
+                              //                 } on PlatformException catch (e) {
+                              //                   debugPrint(
+                              //                     "Zoom error: ${e.code} - ${e.message}",
+                              //                   );
+
+                              //                   if (!mounted) {
+                              //                     return;
+                              //                   }
+
+                              //                   // Stay on the existing Detail Page.
+                              //                   // Optionally show an error message.
+                              //                   ScaffoldMessenger.of(
+                              //                     context,
+                              //                   ).showSnackBar(
+                              //                     SnackBar(
+                              //                       content: Text(
+                              //                         e.message ??
+                              //                             "Unable to join Zoom meeting",
+                              //                       ),
+                              //                     ),
+                              //                   );
+                              //                 }
+                              //               } else if (userCourseProvider
+                              //                       .failure !=
+                              //                   null) {
+                              //                 // IMPORTANT: // Here you need to identify whether the API failure // means "payment required".
+                              //                 // // // Replace this condition with your actual API // errorCode/status/message.
+                              //                 final failureMessage =
+                              //                     userCourseProvider
+                              //                         .failure
+                              //                         ?.message
+                              //                         .toString();
+                              //                 debugPrint(
+                              //                   'Join API Failure: $failureMessage',
+                              //                 );
+                              //                 if (canPay == true) {
+                              //                   if (failureMessage!
+                              //                           .toLowerCase()
+                              //                           .contains('Payment') ||
+                              //                       failureMessage!
+                              //                           .toLowerCase()
+                              //                           .contains('pay') ||
+                              //                       failureMessage!
+                              //                           .toLowerCase()
+                              //                           .contains('enroll')) {
+                              //                     // inside this create order
+
+                              //                     showPaymentGatewayBottomSheet(
+                              //                       context: context,
+                              //                       gateways:
+                              //                           paymentGateWays ?? [],
+
+                              //                       // IMPORTANT:
+                              //                       // This should be the actual webinar ID,
+                              //                       // not courseId unless they are the same in your API.
+                              //                       webinarId:
+                              //                           int.tryParse(
+                              //                             widget.courseId
+                              //                                 .toString(),
+                              //                           ) ??
+                              //                           0,
+
+                              //                       amount:
+                              //                           double.tryParse(
+                              //                             course.price
+                              //                                     ?.toString() ??
+                              //                                 '0',
+                              //                           ) ??
+                              //                           0,
+
+                              //                       name: '${course.title}',
+
+                              //                       description:
+                              //                           course.description ??
+                              //                           'Webinar Registration',
+
+                              //                       razorpayService:
+                              //                           _razorpayService,
+
+                              //                       paymentProvider:
+                              //                           paymentProvider,
+                              //                     );
+
+                              //                     return;
+                              //                   }
+                              //                 }
+
+                              //                 _handleFailure(
+                              //                   userCourseProvider,
+                              //                   permissionProvider,
+                              //                   paymentProvider,
+                              //                 );
+                              //               } else {
+                              //                 ScaffoldMessenger.of(
+                              //                   context,
+                              //                 ).showSnackBar(
+                              //                   const SnackBar(
+                              //                     content: Text(
+                              //                       'Something went wrong. Please try again.',
+                              //                     ),
+                              //                   ),
+                              //                 );
+                              //               }
+                              //             } catch (e) {
+                              //               if (!mounted) return;
+
+                              //               ScaffoldMessenger.of(
+                              //                 context,
+                              //               ).showSnackBar(
+                              //                 const SnackBar(
+                              //                   content: Text(
+                              //                     'Unable to join the webinar. Please try again.',
+                              //                   ),
+                              //                 ),
+                              //               );
+
+                              //               debugPrint(
+                              //                 'Join webinar error: $e',
+                              //               );
+                              //             }
+                              //           },
+                              // ),
                               const SizedBox(height: 30),
                             ],
                           ),
@@ -1390,7 +2547,7 @@ class _UserWebinarCourseDetailPageState
         final fileId = getGoogleDriveFileId(videoUrl);
 
         finalVideoUrl =
-            'https://www.googleapis.com/drive/v3/files/$fileId?alt=media&key=AIzaSyAEdvK8Faly6R804obbUWubrVzGYfNa_LY';
+            'https://www.googleapis.com/drive/v3/files/$fileId?alt=media&key=AIzaSyBUn8COoVUH_e3w8TQelg55vhsnAOIK5mI';
 
         debugPrint('Recording Type: Drive');
         debugPrint('Drive URL: $finalVideoUrl');
@@ -2452,4 +3609,105 @@ class _TimeSlotContainer extends StatelessWidget {
       ),
     );
   }
+}
+
+Widget _buildPaymentStatusTag(String status) {
+  final normalizedStatus = status.trim().toLowerCase();
+
+  Color backgroundColor;
+  Color borderColor;
+  Color textColor;
+  IconData icon;
+
+  switch (normalizedStatus) {
+    case 'paid':
+      backgroundColor = const Color(0xFFE8F7EF);
+      borderColor = const Color(0xFF16804A).withOpacity(0.20);
+      textColor = const Color(0xFF16804A);
+      icon = Icons.check_circle_rounded;
+      break;
+
+    case 'pending':
+      backgroundColor = const Color(0xFFFFF7E6);
+      borderColor = const Color(0xFFE6A700).withOpacity(0.20);
+      textColor = const Color(0xFFB77900);
+      icon = Icons.schedule_rounded;
+      break;
+
+    case 'processing':
+      backgroundColor = const Color(0xFFEAF2FF);
+      borderColor = const Color(0xFF3578E5).withOpacity(0.20);
+      textColor = const Color(0xFF3578E5);
+      icon = Icons.sync_rounded;
+      break;
+
+    case 'failed':
+      backgroundColor = const Color(0xFFFFEEEE);
+      borderColor = const Color(0xFFD92D20).withOpacity(0.20);
+      textColor = const Color(0xFFD92D20);
+      icon = Icons.error_rounded;
+      break;
+
+    case 'cancelled':
+      backgroundColor = const Color(0xFFF3F4F6);
+      borderColor = const Color(0xFF6B7280).withOpacity(0.20);
+      textColor = const Color(0xFF6B7280);
+      icon = Icons.cancel_rounded;
+      break;
+
+    case 'expired':
+      backgroundColor = const Color(0xFFFFEEEE);
+      borderColor = const Color(0xFFD92D20).withOpacity(0.20);
+      textColor = const Color(0xFFD92D20);
+      icon = Icons.timer_off_rounded;
+      break;
+
+    case 'refunded':
+      backgroundColor = const Color(0xFFF3EEFF);
+      borderColor = const Color(0xFF7C3AED).withOpacity(0.20);
+      textColor = const Color(0xFF7C3AED);
+      icon = Icons.replay_rounded;
+      break;
+
+    case 'notrequired':
+    case 'not required':
+      backgroundColor = const Color(0xFFE8F7EF);
+      borderColor = const Color(0xFF16804A).withOpacity(0.20);
+      textColor = const Color(0xFF16804A);
+      icon = Icons.check_circle_outline_rounded;
+      break;
+
+    default:
+      backgroundColor = Colors.white.withOpacity(0.06);
+      borderColor = Colors.white.withOpacity(0.12);
+      textColor = AppColor.lightgray;
+      icon = Icons.info_outline_rounded;
+  }
+
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+    decoration: BoxDecoration(
+      color: backgroundColor,
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: borderColor),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: textColor),
+        const SizedBox(width: 5),
+        Text(
+          status.trim().isEmpty ? 'Payment Status' : status.trim(),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: textColor,
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            fontFamily: 'Urbanist',
+          ),
+        ),
+      ],
+    ),
+  );
 }

@@ -1,11 +1,11 @@
 class ApiEndPoint {
-  // static const String baseUrl = "http://57.128.119.77:8080/api/";
-  static const String baseUrl =
-      "https://5c5f-2405-201-e018-b0-4477-a4f0-7177-fd95.ngrok-free.app/api/";
+  static const String baseUrl = "http://57.128.119.77:8080/api/";
+  // static const String baseUrl =
+  //     "https://e84e-2405-201-f007-67-1c36-254b-1494-9998.ngrok-free.app/api/";
 
-  // static const String serverUrl = 'http://57.128.119.77:8080/';
-  static const String serverUrl =
-      'https://5c5f-2405-201-e018-b0-4477-a4f0-7177-fd95.ngrok-free.app';
+  static const String serverUrl = 'http://57.128.119.77:8080/';
+  // static const String serverUrl =
+  //     'https://e84e-2405-201-f007-67-1c36-254b-1494-9998.ngrok-free.app';
 
   // login and register
   static const String loginEndPoint = "Auth/login";
@@ -82,4 +82,7 @@ class ApiEndPoint {
 
   // verify payment
   static const String paymentsVerifyEndPoint = "Payments/verify";
+
+  // payment history
+  static const String paymentHistoryEndPoint = "Transactions";
 }

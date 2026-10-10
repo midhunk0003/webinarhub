@@ -1,4 +1,4 @@
-package com.webinarhub.lms
+package com.wwitplwebinarhub.lms
 
 import android.app.Activity
 import android.content.Intent

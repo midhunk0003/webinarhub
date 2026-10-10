@@ -277,7 +277,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   TextSpan(
                                     text: 'Login',
                                     style: TextStyle(
-                                      color: Colors.blue,
+                                      color: AppColor.gold,
                                     ), // second color
                                     recognizer:
                                         TapGestureRecognizer()

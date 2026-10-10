@@ -1,11 +1,16 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:lms/animation/animation.dart';
+import 'package:lms/core/api_end_point.dart';
 import 'package:lms/core/colors.dart';
 import 'package:lms/core/failure.dart';
 import 'package:lms/core/services/generateZoomJwt.dart';
 import 'package:lms/presentation/provider/trainer_provider/trainer_all_webinar_provider.dart';
 import 'package:lms/presentation/provider/trainer_provider/trainer_dashboard_provider.dart';
 import 'package:lms/presentation/screen/trainer/widget/monthly_chart.dart';
+import 'package:lms/presentation/screen/trainer/widget/trainer_recent_webinars_widget.dart';
 import 'package:lms/presentation/widgets/common_custome_button_widget.dart';
 import 'package:lms/presentation/widgets/diloges/app_dialog_helper.dart';
 import 'package:lms/presentation/widgets/formatWebinarDate.dart';
@@ -15,6 +20,8 @@ import 'package:lms/presentation/screen/user/home_screen/widgets/home_header_sec
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
+
+import 'widget/trainer_upcomming_webinar.dart';
 
 class TrainerHomeScreen extends StatefulWidget {
   final VoidCallback? onViewAll;
@@ -141,25 +148,44 @@ class _TrainerHomeScreenState extends State<TrainerHomeScreen> {
                             showProfileImage: true,
                           ),
                       const SizedBox(height: 25),
-                      DashboardTitle(
-                        "Upcomming Webinars",
-                        true,
-                        widget.onViewAll,
-                      ),
-                      const SizedBox(height: 25),
                       trainerDashProvider.isLoading
                           ? UpcomingWebinarCardShimmer()
-                          : UpcomingWebinarCard(
-                            trainerDashProvider: trainerDashProvider,
-                            isTablet: isTablet,
+                          : WebinarSectionEntrance(
+                            delay: const Duration(milliseconds: 300),
+                            child: Column(
+                              children: [
+                                DashboardTitle(
+                                  "Upcomming Webinars",
+                                  true,
+                                  widget.onViewAll,
+                                ),
+                                const SizedBox(height: 25),
+                                UpcomingWebinarCard(
+                                  trainerDashProvider: trainerDashProvider,
+                                  isTablet: isTablet,
+                                ),
+                              ],
+                            ),
                           ),
                       const SizedBox(height: 25),
-                      DashboardTitle("Recent Webinars", true, widget.onViewAll),
-                      const SizedBox(height: 15),
                       trainerDashProvider.isLoading
                           ? WebinarShimmerList()
-                          : WebinarList(
-                            trainerDashboardProvider: trainerDashProvider,
+                          : WebinarSectionEntrance(
+                            delay: const Duration(milliseconds: 500),
+                            child: Column(
+                              children: [
+                                DashboardTitle(
+                                  "Recent Webinars",
+                                  true,
+                                  widget.onViewAll,
+                                ),
+
+                                const SizedBox(height: 15),
+                                TrainerRecentWebinarsWidget(
+                                  trainerDashboardProvider: trainerDashProvider,
+                                ),
+                              ],
+                            ),
                           ),
                       const SizedBox(height: 25),
                       DashboardTitle("Overview", false, widget.onViewAll),
@@ -266,160 +292,6 @@ class DashboardTitle extends StatelessWidget {
   }
 }
 
-class UpcomingWebinarCard extends StatelessWidget {
-  final TrainerDashboardProvider trainerDashProvider;
-  final bool isTablet;
-  const UpcomingWebinarCard({
-    super.key,
-    required this.trainerDashProvider,
-    required this.isTablet,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final upcommingWebinars =
-        trainerDashProvider
-            .trainerUpcommingAndAssignedModel
-            ?.data
-            ?.upcomingWebinar;
-
-    if (upcommingWebinars == null) {
-      return const SizedBox.shrink();
-    }
-    return InkWell(
-      onTap: () {
-        Navigator.pushNamed(
-          context,
-          '/trainerwebinardetailpage',
-          arguments: {'courseId': upcommingWebinars.id},
-        );
-      },
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              AppColor.formPrimaryColor.withOpacity(0.24),
-              AppColor.formSecondaryColor.withOpacity(0.24),
-            ],
-          ),
-          border: Border.all(color: AppColor.formBorderColor.withOpacity(0.24)),
-          borderRadius: BorderRadius.circular(10),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.4),
-              offset: const Offset(0, 2),
-              blurRadius: 4,
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              "Upcoming Webinar",
-              style: TextStyle(color: Colors.white70),
-            ),
-
-            const SizedBox(height: 10),
-
-            Text(
-              "${trainerDashProvider.trainerUpcommingAndAssignedModel?.data?.upcomingWebinar?.title ?? 'N/A'}",
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 22,
-              ),
-            ),
-
-            const SizedBox(height: 8),
-
-            Text(
-              formatWebinarDate(
-                trainerDashProvider
-                    .trainerUpcommingAndAssignedModel
-                    ?.data
-                    ?.upcomingWebinar
-                    ?.startDateTime,
-                trainerDashProvider
-                    .trainerUpcommingAndAssignedModel
-                    ?.data
-                    ?.upcomingWebinar
-                    ?.endDateTime,
-              ),
-              style: const TextStyle(color: Colors.white70),
-            ),
-
-            const SizedBox(height: 20),
-
-            Row(
-              children: [
-                // ElevatedButton.icon(
-                //   onPressed: () async {
-                //     await trainerDashProvider.launchZoomMeeting(
-                //       trainerDashProvider
-                //               .trainerUpcommingAndAssignedModel
-                //               ?.data
-                //               ?.upcomingWebinar!
-                //               .meetingUrl ??
-                //           '',
-                //     );
-                //   },
-                //   icon: const Icon(Icons.video_call),
-                //   label: const Text("Join"),
-                // ),
-                Expanded(
-                  child: CommonCustomeButtonWidget(
-                    isTablet: isTablet,
-                    text: "Join",
-                    icon: Icons.video_call,
-                    onTap: () async {
-                      await trainerDashProvider.launchZoomMeeting(
-                        trainerDashProvider
-                                .trainerUpcommingAndAssignedModel
-                                ?.data
-                                ?.upcomingWebinar
-                                ?.meetingUrl ??
-                            '',
-                      );
-                    },
-                  ),
-                ),
-                const Spacer(),
-
-                const Icon(Icons.people, color: Colors.white),
-
-                const SizedBox(width: 8),
-
-                InkWell(
-                  onTap: () {
-                    // Navigator.pushNamed(
-                    //   context,
-                    //   '/viewallparticipents',
-                    //   arguments: {
-                    //     'courseId':
-                    //         trainerDashProvider
-                    //             .trainerUpcommingAndAssignedModel
-                    //             ?.data
-                    //             ?.upcomingWebinar!
-                    //             .id,
-                    //   },
-                    // );
-                  },
-                  child: Text(
-                    "${trainerDashProvider.trainerUpcommingAndAssignedModel?.data?.upcomingWebinar?.enrolledCount} Students",
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class StatsGrid extends StatelessWidget {
   final TrainerDashboardProvider trainerDashProvider;
   final bool isTablet;
@@ -439,55 +311,55 @@ class StatsGrid extends StatelessWidget {
         overview?.data?.totalWebinars?.toString() ?? '0',
         'Total Webinars',
         Icons.video_collection_outlined,
-        Colors.blue,
+        AppColor.gold,
       ),
       DashboardItem(
         overview?.data?.draftWebinars?.toString() ?? '0',
-        'Draft',
+        'Draft Webinars',
         Icons.edit_outlined,
-        Colors.orange,
+        AppColor.gold,
       ),
       DashboardItem(
         overview?.data?.publishedWebinars?.toString() ?? '0',
-        'Published',
-        Icons.check_circle_outline,
-        Colors.green,
+        'Published Webinars',
+        Icons.check_circle_outline_rounded,
+        AppColor.gold,
       ),
       DashboardItem(
         overview?.data?.upcomingWebinars?.toString() ?? '0',
-        'Upcoming',
-        Icons.schedule_outlined,
-        Colors.purple,
+        'Upcoming Webinars',
+        Icons.schedule_rounded,
+        AppColor.gold,
       ),
       DashboardItem(
         overview?.data?.completedWebinars?.toString() ?? '0',
-        'Completed',
-        Icons.task_alt_outlined,
-        Colors.teal,
+        'Completed Webinars',
+        Icons.task_alt_rounded,
+        AppColor.gold,
       ),
       DashboardItem(
         overview?.data?.cancelledWebinars?.toString() ?? '0',
-        'Cancelled',
+        'Cancelled Webinars',
         Icons.cancel_outlined,
-        Colors.red,
+        AppColor.gold,
       ),
       DashboardItem(
         overview?.data?.totalParticipants?.toString() ?? '0',
-        'Students',
-        Icons.people_outline,
-        Colors.indigo,
+        'Total Participants',
+        Icons.people_outline_rounded,
+        AppColor.gold,
       ),
       DashboardItem(
         overview?.data?.materialsUploaded?.toString() ?? '0',
-        'Materials',
-        Icons.folder_outlined,
-        Colors.amber,
+        'Materials Uploaded',
+        Icons.folder_copy_outlined,
+        AppColor.gold,
       ),
       DashboardItem(
         overview?.data?.notificationsSent?.toString() ?? '0',
-        'Notifications',
-        Icons.notifications_none,
-        Colors.cyan,
+        'Notifications Sent',
+        Icons.notifications_active_outlined,
+        AppColor.gold,
       ),
     ];
 
@@ -500,10 +372,10 @@ class StatsGrid extends StatelessWidget {
         crossAxisCount: isTablet ? 3 : 2,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
-        mainAxisExtent: isTablet ? 145 : 135,
+        mainAxisExtent: isTablet ? 150 : 142,
       ),
       itemBuilder: (context, index) {
-        return DashboardTile(item: items[index]);
+        return DashboardTile(item: items[index], animationIndex: index);
       },
     );
   }
@@ -518,308 +390,225 @@ class DashboardItem {
   const DashboardItem(this.value, this.title, this.icon, this.color);
 }
 
-class DashboardTile extends StatelessWidget {
+class DashboardTile extends StatefulWidget {
   final DashboardItem item;
+  final int animationIndex;
 
-  const DashboardTile({super.key, required this.item});
+  const DashboardTile({
+    super.key,
+    required this.item,
+    required this.animationIndex,
+  });
+
+  @override
+  State<DashboardTile> createState() => _DashboardTileState();
+}
+
+class _DashboardTileState extends State<DashboardTile>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _fadeAnimation;
+  late final Animation<double> _scaleAnimation;
+  late final Animation<Offset> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 650),
+    );
+
+    _fadeAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutCubic,
+    );
+
+    _scaleAnimation = Tween<double>(
+      begin: 0.82,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
+
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.18),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+
+    Future.delayed(
+      Duration(milliseconds: 100 + (widget.animationIndex * 100)),
+      () {
+        if (mounted) {
+          _controller.forward();
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: ScaleTransition(scale: _scaleAnimation, child: _buildCard()),
+      ),
+    );
+  }
+
+  Widget _buildCard() {
     return Container(
-      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
+        borderRadius: BorderRadius.circular(20),
+        gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            AppColor.formPrimaryColor.withOpacity(0.22),
-            AppColor.formSecondaryColor.withOpacity(0.10),
-          ],
+          colors: [Color(0xFF191919), Color(0xFF111111), Color(0xFF0B0B0B)],
         ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColor.formBorderColor.withOpacity(0.20)),
-        boxShadow: [
+        border: Border.all(color: AppColor.gold.withOpacity(0.20), width: 1),
+        boxShadow: const [
           BoxShadow(
-            color: Colors.black.withOpacity(0.18),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
+            color: Color(0x66000000),
+            blurRadius: 12,
+            offset: Offset(0, 7),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          /// Icon
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: item.color.withOpacity(0.13),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(item.icon, color: item.color, size: 22),
-          ),
-
-          const Spacer(),
-
-          /// Value
-          Text(
-            item.value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 25,
-              fontWeight: FontWeight.w700,
-              height: 1,
-            ),
-          ),
-
-          const SizedBox(height: 7),
-
-          /// Title
-          Text(
-            item.title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class WebinarList extends StatelessWidget {
-  final TrainerDashboardProvider trainerDashboardProvider;
-  const WebinarList({required this.trainerDashboardProvider, super.key});
-  @override
-  Widget build(BuildContext context) {
-    final webinars =
-        trainerDashboardProvider
-            .trainerUpcommingAndAssignedModel
-            ?.data
-            ?.assignedWebinars ??
-        [];
-
-    if (webinars.isEmpty) {
-      return const SizedBox.shrink();
-    }
-    return ListView.separated(
-      padding: EdgeInsets.all(0),
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: webinars.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        return WebinarTile(
-          title: webinars[index].title ?? '',
-          status: _getStatusText(webinars[index].status),
-          students: webinars[index].enrolledCount ?? '0',
-          startDateTime: webinars[index].startDateTime ?? '',
-          recentWebinarId: webinars[index].id.toString() ?? '',
-        );
-      },
-    );
-  }
-}
-
-class WebinarTile extends StatelessWidget {
-  final String title;
-  final String status;
-  final String students;
-  final String startDateTime;
-  final String? recentWebinarId;
-
-  const WebinarTile({
-    super.key,
-    required this.title,
-    required this.status,
-    required this.students,
-    required this.startDateTime,
-    required this.recentWebinarId,
-  });
-  // ============================================================
-  // STATUS COLOR
-  // ============================================================
-
-  Color _statusColor() {
-    switch (status.toLowerCase()) {
-      case 'live':
-        return Colors.redAccent;
-
-      case 'scheduled':
-        return Colors.orangeAccent;
-
-      case 'completed':
-        return Colors.greenAccent;
-
-      case 'cancelled':
-        return Colors.redAccent;
-
-      default:
-        return Colors.white70;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final dateTime = DateTime.parse(startDateTime).toLocal();
-    final formattedDate = DateFormat('dd MMM yyyy').format(dateTime);
-    final formattedTime = DateFormat('hh:mm a').format(dateTime);
-
-    return InkWell(
-      onTap: () {
-        Navigator.pushNamed(
-          context,
-          '/trainerwebinardetailpage',
-          arguments: {'courseId': recentWebinarId},
-        );
-      },
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColor.cardBackground,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColor.gold.withOpacity(.14)),
-        ),
-        child: Row(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Stack(
           children: [
-            // Webinar icon
-            Container(
-              height: 48,
-              width: 48,
-              decoration: BoxDecoration(
-                color: AppColor.gold.withOpacity(.10),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: const Icon(
-                Icons.video_collection_outlined,
-                color: AppColor.gold,
-                size: 24,
+            // Top gold accent line.
+            Positioned(
+              top: 0,
+              left: 20,
+              right: 20,
+              child: Container(
+                height: 1,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.transparent,
+                      AppColor.gold.withOpacity(0.25),
+                      AppColor.goldLight.withOpacity(0.60),
+                      AppColor.gold.withOpacity(0.25),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
               ),
             ),
 
-            const SizedBox(width: 14),
+            // Bottom gold accent line.
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                height: 2,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.transparent,
+                      AppColor.gold.withOpacity(0.20),
+                      AppColor.goldLight.withOpacity(0.35),
+                      AppColor.gold.withOpacity(0.20),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+            ),
 
-            // Content
-            Expanded(
+            Padding(
+              padding: const EdgeInsets.all(15),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Title + status
+                  // Icon.
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(13),
+                      gradient: const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Color(0xFF2B2418), Color(0xFF17130D)],
+                      ),
+                      border: Border.all(
+                        color: AppColor.gold.withOpacity(0.28),
+                      ),
+                    ),
+                    child: Icon(
+                      widget.item.icon,
+                      color: AppColor.goldLight,
+                      size: 22,
+                    ),
+                  ),
+
+                  const Spacer(),
+
+                  // Title.
+                  Text(
+                    widget.item.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFFBDBDBD),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 0.15,
+                    ),
+                  ),
+
+                  const SizedBox(height: 7),
+
+                  // Value with gold gradient.
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Expanded(
-                        child: Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
+                        child: ShaderMask(
+                          shaderCallback: (bounds) {
+                            return LinearGradient(
+                              colors: [
+                                AppColor.goldLight,
+                                AppColor.gold,
+                                AppColor.goldDark,
+                              ],
+                            ).createShader(bounds);
+                          },
+                          child: Text(
+                            widget.item.value,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 26,
+                              fontWeight: FontWeight.w800,
+                              height: 1,
+                              letterSpacing: -0.7,
+                            ),
                           ),
                         ),
                       ),
-
-                      const SizedBox(width: 8),
-
-                      _StatusBadge(status: status, color: _statusColor()),
-
-                      // // Status
-                      // Container(
-                      //   padding: const EdgeInsets.symmetric(
-                      //     horizontal: 8,
-                      //     vertical: 4,
-                      //   ),
-                      //   decoration: BoxDecoration(
-                      //     color: Colors.green.withOpacity(.12),
-                      //     borderRadius: BorderRadius.circular(8),
-                      //   ),
-                      //   child: Text(
-                      //     status,
-                      //     style: const TextStyle(
-                      //       color: Colors.greenAccent,
-                      //       fontSize: 11,
-                      //       fontWeight: FontWeight.w600,
-                      //     ),
-                      //   ),
-                      // ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 9),
-
-                  // Date and time
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.calendar_today_outlined,
-                        color: Colors.white54,
-                        size: 14,
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        formattedDate,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                        ),
-                      ),
-
-                      const SizedBox(width: 12),
-
-                      const Icon(
-                        Icons.access_time,
-                        color: Colors.white54,
-                        size: 14,
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        formattedTime,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  // Students
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.people_outline,
-                        color: Colors.white54,
+                      const SizedBox(width: 6),
+                      Icon(
+                        Icons.arrow_outward_rounded,
+                        color: AppColor.gold.withOpacity(0.60),
                         size: 15,
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        '$students Students',
-                        style: const TextStyle(
-                          color: Colors.white54,
-                          fontSize: 12,
-                        ),
                       ),
                     ],
                   ),
                 ],
               ),
-            ),
-
-            const SizedBox(width: 10),
-
-            const Icon(
-              Icons.arrow_forward_ios,
-              color: Colors.white38,
-              size: 16,
             ),
           ],
         ),

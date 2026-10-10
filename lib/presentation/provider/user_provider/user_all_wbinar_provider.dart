@@ -17,19 +17,36 @@ class UserAllWbinarProvider extends ChangeNotifier {
   UserAllWbinarProvider({required this.userWebinarRepository});
 
   bool _isLoading = false;
+
+  bool _isLoadingMore = false;
+  bool _hasMore = true;
+
   Failure? _failure;
   Success? _success;
   UserFullListWebinarModel? _fullListWebinarModel;
   NotificationModel? _notificationModel;
 
+  int _currentPage = 1;
+  final int _pageSize = 5;
+
+  // All loaded webinar items
+  final List<AllWebinarItem> _webinarItems = [];
+
   // getter
 
   bool get isLoading => _isLoading;
+  bool get isLoadingMore => _isLoadingMore;
+  bool get hasMore => _hasMore;
+
   Failure? get failure => _failure;
   Success? get success => _success;
   UserFullListWebinarModel? get fullListWebinarModel => _fullListWebinarModel;
 
   NotificationModel? get notificationModel => _notificationModel;
+
+  int get currentPage => _currentPage;
+
+  List<AllWebinarItem> get webinarItems => List.unmodifiable(_webinarItems);
 
   // functions
 
@@ -44,27 +61,67 @@ class UserAllWbinarProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> getAllWebinarPro(String? status, String? search) async {
-    _isLoading = true;
-    _failure = null;
-    _success = null;
+  Future<void> getAllWebinarPro(
+    String? status,
+    String? search, {
+    int? paymentStatus,
+    bool loadMore = false,
+  }) async {
+    // Avoid duplicate requests
+    if (_isLoading || _isLoadingMore) return;
+
+    if (loadMore && !_hasMore) return;
+    if (loadMore) {
+      _isLoadingMore = true;
+    } else {
+      // New search/filter/refresh starts from page 1
+      _isLoading = true;
+      _failure = null;
+      _success = null;
+      _currentPage = 1;
+      _hasMore = true;
+      _webinarItems.clear();
+    }
+
+    final requestedPage = loadMore ? _currentPage + 1 : 1;
+
     notifyListeners();
-    final result = await userWebinarRepository.getAllUserWebinars(
-      status,
-      search,
-    );
-    result.fold(
-      (failure) {
-        _failure = failure;
-        _isLoading = false;
-        notifyListeners();
-      },
-      (success) {
-        _fullListWebinarModel = success;
-        _isLoading = false;
-        notifyListeners();
-      },
-    );
+
+    try {
+      final result = await userWebinarRepository.getAllUserWebinars(
+        status,
+        search,
+        paymentStatus,
+        page: requestedPage,
+        pageSize: _pageSize,
+      );
+      result.fold(
+        (failure) {
+          _failure = failure;
+          _isLoading = false;
+          _isLoadingMore = false; // Important fix
+          notifyListeners();
+        },
+        (success) {
+          _fullListWebinarModel = success;
+          final newItems = success.data?.items ?? [];
+          _webinarItems.addAll(newItems);
+
+          _currentPage = requestedPage;
+
+          // If fewer than 5 items arrive, there are no more
+          // full pages to load.
+          _hasMore = newItems.length == _pageSize;
+          _isLoading = false;
+          _isLoadingMore = false;
+          notifyListeners();
+        },
+      );
+    } finally {
+      _isLoading = false;
+      _isLoadingMore = false;
+      notifyListeners();
+    }
   }
 
   // Future<void> getAllNotification(String? isRead) async {

@@ -1,22 +1,18 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:flutter_widget_from_html/flutter_widget_from_html.dart';
+import 'package:lms/animation/animation.dart';
 import 'package:lms/core/colors.dart';
 import 'package:lms/core/failure.dart';
 import 'package:lms/presentation/provider/trainer_provider/trainer_all_webinar_provider.dart';
-import 'package:lms/presentation/provider/trainer_provider/trainer_dashboard_provider.dart';
 import 'package:lms/presentation/provider/user_provider/user_dashboard_provider.dart';
-import 'package:lms/presentation/screen/trainer/widget/monthly_chart.dart';
-import 'package:lms/presentation/screen/user/home_screen/widgets/webinar_price_label.dart';
+import 'package:lms/presentation/screen/user/home_screen/widgets/recent_webinars_widget.dart';
+import 'package:lms/presentation/screen/user/home_screen/widgets/upcomming_webinarcard_widget.dart';
 import 'package:lms/presentation/widgets/common_custome_button_widget.dart';
 import 'package:lms/presentation/widgets/diloges/app_dialog_helper.dart';
-import 'package:lms/presentation/widgets/formatWebinarDate.dart';
 import 'package:lms/presentation/widgets/network_retry_widget.dart';
 import 'package:lms/presentation/widgets/reusablebackground/reusablebackground.dart';
 import 'package:lms/presentation/screen/user/home_screen/widgets/home_header_section.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
 
 class UserHomeScreen extends StatefulWidget {
@@ -33,6 +29,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
   bool _isPrivacyPolicyChecked = false;
 
   bool _isDialogShowing = false;
+
   @override
   void initState() {
     _privacyScrollController.addListener(_onScroll);
@@ -71,6 +68,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
       dashprovider.getUserPolicyAndAgreePro(), // ✅ ADD THIS
       webinarProvider.getNotificationCountPro(),
     ]);
+
     if (!mounted) return;
     _handleFailure(dashprovider, webinarProvider);
   }
@@ -93,6 +91,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
     if (failures.isEmpty) {
       return;
     }
+
     // Ignore network failure
     if (failures == null || failures is NetworkFailure) {
       return;
@@ -149,6 +148,8 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                 onRefresh: () async {
                   await _initialData();
                 },
+                color: AppColor.gold,
+                backgroundColor: AppColor.background,
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.only(bottom: 30),
                   child: Stack(
@@ -180,30 +181,49 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                                 showProfileImage: true,
                               ),
                           const SizedBox(height: 25),
-                          DashboardTitle(
-                            "Upcomming Webinars",
-                            true,
-                            widget.onViewAll,
-                          ),
-                          const SizedBox(height: 25),
                           userDashboardProvider.isLoading
                               ? UpcomingWebinarCardShimmer()
-                              : UpcomingWebinarCard(
-                                userDashboardProvider: userDashboardProvider,
-                                isTablet: isTablet,
+                              : WebinarSectionEntrance(
+                                delay: const Duration(milliseconds: 300),
+                                child: Column(
+                                  children: [
+                                    DashboardTitle(
+                                      "Upcomming Webinars",
+                                      true,
+                                      widget.onViewAll,
+                                    ),
+                                    const SizedBox(height: 25),
+                                    UpcomingWebinarCard(
+                                      userDashboardProvider:
+                                          userDashboardProvider,
+                                      isTablet: isTablet,
+                                    ),
+                                  ],
+                                ),
                               ),
+
                           const SizedBox(height: 25),
-                          DashboardTitle(
-                            "Recent Webinars",
-                            true,
-                            widget.onViewAll,
-                          ),
-                          const SizedBox(height: 15),
                           userDashboardProvider.isLoading
                               ? WebinarShimmerList()
-                              : WebinarList(
-                                userDashboardProvider: userDashboardProvider,
+                              : WebinarSectionEntrance(
+                                delay: const Duration(milliseconds: 500),
+                                child: Column(
+                                  children: [
+                                    DashboardTitle(
+                                      "Recent Webinars",
+                                      true,
+                                      widget.onViewAll,
+                                    ),
+
+                                    const SizedBox(height: 15),
+                                    WebinarList(
+                                      userDashboardProvider:
+                                          userDashboardProvider,
+                                    ),
+                                  ],
+                                ),
                               ),
+
                           const SizedBox(height: 25),
                           DashboardTitle("Overview", false, widget.onViewAll),
                           const SizedBox(height: 15),
@@ -358,9 +378,9 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                                     // CONTENT
                                     // ==================================================
                                     if (content.isNotEmpty)
-                                      Text(
+                                      HtmlWidget(
                                         content,
-                                        style: const TextStyle(
+                                        textStyle: const TextStyle(
                                           fontSize: 15,
                                           height: 1.6,
                                           color: Colors.black87,
@@ -583,866 +603,6 @@ class DashboardTitle extends StatelessWidget {
   }
 }
 
-class UpcomingWebinarCard extends StatefulWidget {
-  final UserDashboardProvider userDashboardProvider;
-  final bool isTablet;
-
-  const UpcomingWebinarCard({
-    super.key,
-    required this.userDashboardProvider,
-    required this.isTablet,
-  });
-
-  @override
-  State<UpcomingWebinarCard> createState() => _UpcomingWebinarCardState();
-}
-
-class _UpcomingWebinarCardState extends State<UpcomingWebinarCard>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _animationController;
-
-  @override
-  void initState() {
-    super.initState();
-
-    // One continuous controller for all card animations.
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 4),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final upcommingWebinars =
-        widget
-            .userDashboardProvider
-            .userDashboardUpcommingAndRecentModel
-            ?.data
-            ?.upcomingWebinar;
-
-    if (upcommingWebinars == null) {
-      return const SizedBox.shrink();
-    }
-
-    return InkWell(
-      onTap: () {
-        Navigator.pushNamed(
-          context,
-          '/userwebinarcoursedetailpage',
-          arguments: {'courseId': upcommingWebinars.webinarId},
-        );
-      },
-      child: AnimatedBuilder(
-        animation: _animationController,
-        builder: (context, child) {
-          final value = _animationController.value;
-
-          // Smooth sine wave for breathing animations.
-          final breathe = (math.sin(value * math.pi * 2) + 1) / 2;
-
-          // Faster pulse.
-          final pulse = (math.sin(value * math.pi * 4) + 1) / 2;
-
-          return Transform.translate(
-            offset: Offset(0, -0.7 * breathe),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                // ============================================================
-                // 1. SOFT OUTER GLOW
-                // ============================================================
-                Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(14),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColor.goldGradient.first.withOpacity(
-                          0.08 + (breathe * 0.12),
-                        ),
-                        blurRadius: 12 + (breathe * 12),
-                        spreadRadius: 1 + (breathe * 2),
-                      ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: Stack(
-                      children: [
-                        // ====================================================
-                        // MAIN CARD
-                        // ====================================================
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                AppColor.formPrimaryColor.withOpacity(0.24),
-                                AppColor.formSecondaryColor.withOpacity(0.24),
-                              ],
-                            ),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: AppColor.formBorderColor.withOpacity(0.24),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.4),
-                                offset: const Offset(0, 2),
-                                blurRadius: 4,
-                              ),
-                            ],
-                          ),
-                          child: Stack(
-                            children: [
-                              // ==============================================
-                              // 2. GOLDEN PARTICLES
-                              // ==============================================
-                              Positioned.fill(
-                                child: IgnorePointer(
-                                  child: CustomPaint(
-                                    painter: _GoldenParticlesPainter(
-                                      animationValue: value,
-                                    ),
-                                  ),
-                                ),
-                              ),
-
-                              // ==============================================
-                              // CONTENT
-                              // ==============================================
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // ==========================================
-                                  // 3. UPCOMING WEBINAR INDICATOR
-                                  // ==========================================
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      // Outer pulsing ring
-                                      Container(
-                                        width: 14 + (pulse * 4),
-                                        height: 14 + (pulse * 4),
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: AppColor.goldGradient.first
-                                              .withOpacity(
-                                                0.08 + (pulse * 0.10),
-                                              ),
-                                        ),
-                                        child: Center(
-                                          child: Container(
-                                            width: 6 + (pulse * 2),
-                                            height: 6 + (pulse * 2),
-                                            decoration: BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              color:
-                                                  AppColor.goldGradient.first,
-                                              boxShadow: [
-                                                BoxShadow(
-                                                  color: AppColor
-                                                      .goldGradient
-                                                      .first
-                                                      .withOpacity(
-                                                        0.5 + (pulse * 0.5),
-                                                      ),
-                                                  blurRadius: 4 + (pulse * 5),
-                                                  spreadRadius: pulse * 1.5,
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-
-                                      const SizedBox(width: 8),
-
-                                      // Animated heading
-                                      Transform.translate(
-                                        offset: Offset(0, -1.2 * pulse),
-                                        child: Opacity(
-                                          opacity: 0.65 + (pulse * 0.35),
-                                          child: const Text(
-                                            "Upcoming Webinar",
-                                            style: TextStyle(
-                                              color: Colors.white70,
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600,
-                                              fontFamily: 'Urbanist',
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-
-                                      const SizedBox(width: 7),
-
-                                      // Small blinking dot
-                                      Opacity(
-                                        opacity: 0.2 + ((1 - pulse) * 0.8),
-                                        child: Container(
-                                          width: 5,
-                                          height: 5,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            color: AppColor.goldGradient.last,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-
-                                  const SizedBox(height: 12),
-
-                                  // ==========================================
-                                  // 4. WEBINAR TITLE
-                                  // ==========================================
-                                  Transform.scale(
-                                    scale: 1.0 + (breathe * 0.008),
-                                    alignment: Alignment.centerLeft,
-                                    child: Text(
-                                      upcommingWebinars.title ?? 'N/A',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 22,
-                                        fontFamily: 'Urbanist',
-                                        shadows: [
-                                          Shadow(
-                                            color: AppColor.goldGradient.first
-                                                .withOpacity(
-                                                  0.05 + (breathe * 0.20),
-                                                ),
-                                            blurRadius: 3 + (breathe * 5),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-
-                                  const SizedBox(height: 8),
-
-                                  // ==========================================
-                                  // DATE
-                                  // ==========================================
-                                  Text(
-                                    formatWebinarDate(
-                                      upcommingWebinars.startDate,
-                                      upcommingWebinars.endDate,
-                                    ),
-                                    style: const TextStyle(
-                                      color: Colors.white70,
-                                      fontFamily: 'Urbanist',
-                                    ),
-                                  ),
-
-                                  const SizedBox(height: 20),
-
-                                  // ==========================================
-                                  // JOIN + PRICE
-                                  // ==========================================
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: CommonCustomeButtonWidget(
-                                          isTablet: widget.isTablet,
-                                          text: "Join",
-                                          icon: null,
-                                          lotty: true,
-                                          onTap: () async {
-                                            Navigator.pushNamed(
-                                              context,
-                                              '/userwebinarcoursedetailpage',
-                                              arguments: {
-                                                'courseId':
-                                                    upcommingWebinars.webinarId,
-                                              },
-                                            );
-                                            // try {
-                                            //   await widget.userDashboardProvider
-                                            //       .userJoinDataPro(
-                                            //         upcommingWebinars.webinarId,
-                                            //         '2',
-                                            //       );
-
-                                            //   if (widget
-                                            //           .userDashboardProvider
-                                            //           .userJoinWebinarModel !=
-                                            //       null) {
-                                            //     final meetingUrl =
-                                            //         upcommingWebinars
-                                            //             .meetingUrl ??
-                                            //         '';
-
-                                            //     if (meetingUrl.isEmpty) {
-                                            //       if (!context.mounted) {
-                                            //         return;
-                                            //       }
-
-                                            //       ScaffoldMessenger.of(
-                                            //         context,
-                                            //       ).showSnackBar(
-                                            //         const SnackBar(
-                                            //           content: Text(
-                                            //             'Unable to open the webinar. Meeting link not found.',
-                                            //           ),
-                                            //         ),
-                                            //       );
-
-                                            //       return;
-                                            //     }
-
-                                            //     await widget
-                                            //         .userDashboardProvider
-                                            //         .launchZoomMeeting(
-                                            //           meetingUrl,
-                                            //         );
-                                            //   } else if (widget
-                                            //           .userDashboardProvider
-                                            //           .failure !=
-                                            //       null) {
-                                            //     if (!context.mounted) {
-                                            //       return;
-                                            //     }
-
-                                            //     AppDialogHelper.showFailureDialog(
-                                            //       context: context,
-                                            //       failure:
-                                            //           widget
-                                            //               .userDashboardProvider
-                                            //               .failure,
-                                            //       provider:
-                                            //           widget
-                                            //               .userDashboardProvider,
-                                            //       onTap: () {
-                                            //         widget.userDashboardProvider
-                                            //             .clearFailure();
-
-                                            //         Navigator.pop(context);
-                                            //       },
-                                            //     );
-                                            //   } else {
-                                            //     if (!context.mounted) {
-                                            //       return;
-                                            //     }
-
-                                            //     ScaffoldMessenger.of(
-                                            //       context,
-                                            //     ).showSnackBar(
-                                            //       const SnackBar(
-                                            //         content: Text(
-                                            //           'Something went wrong. Please try again.',
-                                            //         ),
-                                            //       ),
-                                            //     );
-                                            //   }
-                                            // } catch (e) {
-                                            //   if (!context.mounted) {
-                                            //     return;
-                                            //   }
-
-                                            //   ScaffoldMessenger.of(
-                                            //     context,
-                                            //   ).showSnackBar(
-                                            //     const SnackBar(
-                                            //       content: Text(
-                                            //         'Unable to join the webinar. Please try again.',
-                                            //       ),
-                                            //     ),
-                                            //   );
-
-                                            //   debugPrint(
-                                            //     'Join webinar error: $e',
-                                            //   );
-                                            // }
-                                          },
-                                        ),
-                                      ),
-
-                                      const Spacer(),
-
-                                      // ======================================
-                                      // 5. ANIMATED PRICE
-                                      // ======================================
-                                      Transform.scale(
-                                        scale: 1.0 + (pulse * 0.035),
-                                        child: Opacity(
-                                          opacity: 0.82 + (pulse * 0.18),
-                                          child: webinarPriceLabel(
-                                            isPaid: upcommingWebinars.isPaid,
-                                            price: upcommingWebinars.price,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // ====================================================
-                        // 6. MOVING GOLDEN BORDER SHINE
-                        // ====================================================
-                        Positioned.fill(
-                          child: IgnorePointer(
-                            child: CustomPaint(
-                              painter: _BorderShinePainter(
-                                animationValue: value,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// GOLDEN PARTICLES
-// ============================================================================
-
-class _GoldenParticlesPainter extends CustomPainter {
-  final double animationValue;
-
-  _GoldenParticlesPainter({required this.animationValue});
-
-  final List<_Particle> particles = const [
-    _Particle(0.06, 0.16, 3.0, 0.00),
-    _Particle(0.20, 0.08, 2.0, 0.35),
-    _Particle(0.42, 0.14, 2.5, 0.70),
-    _Particle(0.73, 0.07, 2.0, 0.20),
-    _Particle(0.91, 0.20, 3.0, 0.55),
-    _Particle(0.96, 0.52, 2.0, 0.85),
-    _Particle(0.84, 0.82, 2.5, 0.40),
-    _Particle(0.62, 0.92, 2.0, 0.15),
-    _Particle(0.32, 0.88, 3.0, 0.65),
-    _Particle(0.08, 0.74, 2.0, 0.30),
-    _Particle(0.03, 0.42, 2.5, 0.90),
-  ];
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    for (final particle in particles) {
-      // Different particles blink at different times.
-      final progress = (animationValue + particle.delay) % 1.0;
-
-      final blink = (math.sin(progress * math.pi * 2) + 1) / 2;
-
-      final x = size.width * particle.x;
-      final y = size.height * particle.y;
-
-      final radius = particle.size * (0.65 + blink * 0.45);
-
-      final opacity = 0.10 + (blink * 0.70);
-
-      final paint =
-          Paint()
-            ..color = AppColor.goldGradient.first.withOpacity(opacity)
-            ..maskFilter = MaskFilter.blur(BlurStyle.normal, 2 + (blink * 3));
-
-      canvas.drawCircle(Offset(x, y), radius, paint);
-
-      // Small bright center
-      if (blink > 0.55) {
-        final centerPaint =
-            Paint()
-              ..color = AppColor.goldGradient.last.withOpacity(blink * 0.65);
-
-        canvas.drawCircle(Offset(x, y), radius * 0.35, centerPaint);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _GoldenParticlesPainter oldDelegate) {
-    return oldDelegate.animationValue != animationValue;
-  }
-}
-
-class _Particle {
-  final double x;
-  final double y;
-  final double size;
-  final double delay;
-
-  const _Particle(this.x, this.y, this.size, this.delay);
-}
-
-// ============================================================================
-// MOVING GOLDEN BORDER SHINE
-// ============================================================================
-
-class _BorderShinePainter extends CustomPainter {
-  final double animationValue;
-
-  _BorderShinePainter({required this.animationValue});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0.8, 0.8, size.width - 1.6, size.height - 1.6),
-      const Radius.circular(14),
-    );
-
-    // Animated position around the perimeter.
-    final shinePosition = animationValue * (size.width + size.height) * 2;
-
-    final paint =
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.3
-          ..shader = LinearGradient(
-            begin: Alignment(-1.0 + (animationValue * 2), -1.0),
-            end: Alignment(1.0 + (animationValue * 2), 1.0),
-            colors: [
-              Colors.transparent,
-              AppColor.goldGradient.first.withOpacity(0.05),
-              AppColor.goldGradient.first.withOpacity(0.65),
-              AppColor.goldGradient.last.withOpacity(0.85),
-              Colors.transparent,
-            ],
-            stops: const [0.0, 0.35, 0.48, 0.55, 1.0],
-          ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
-
-    canvas.drawRRect(rect, paint);
-
-    // Very subtle moving point of light.
-    final perimeter = _getPerimeterPoint(size, shinePosition);
-
-    final glowPaint =
-        Paint()
-          ..color = AppColor.goldGradient.last.withOpacity(0.35)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
-
-    canvas.drawCircle(perimeter, 2.0, glowPaint);
-  }
-
-  Offset _getPerimeterPoint(Size size, double position) {
-    final width = size.width;
-    final height = size.height;
-
-    final perimeter = (width + height) * 2;
-    final p = position % perimeter;
-
-    if (p < width) {
-      // Top
-      return Offset(p, 0);
-    }
-
-    if (p < width + height) {
-      // Right
-      return Offset(width, p - width);
-    }
-
-    if (p < (width * 2) + height) {
-      // Bottom
-      return Offset(width - (p - width - height), height);
-    }
-
-    // Left
-    return Offset(0, height - (p - (width * 2) - height));
-  }
-
-  @override
-  bool shouldRepaint(covariant _BorderShinePainter oldDelegate) {
-    return oldDelegate.animationValue != animationValue;
-  }
-}
-
-// old normal card
-// class UpcomingWebinarCard extends StatelessWidget {
-//   final UserDashboardProvider userDashboardProvider;
-//   final bool isTablet;
-//   const UpcomingWebinarCard({
-//     super.key,
-//     required this.userDashboardProvider,
-//     required this.isTablet,
-//   });
-
-//   @override
-//   Widget build(BuildContext context) {
-//     final upcommingWebinars =
-//         userDashboardProvider
-//             .userDashboardUpcommingAndRecentModel
-//             ?.data
-//             ?.upcomingWebinar;
-
-//     if (upcommingWebinars == null) {
-//       return const SizedBox.shrink();
-//     }
-//     return InkWell(
-//       onTap: () {
-//         Navigator.pushNamed(
-//           context,
-//           '/userwebinarcoursedetailpage',
-//           arguments: {'courseId': upcommingWebinars.webinarId},
-//         );
-//       },
-//       child: Container(
-//         padding: const EdgeInsets.all(20),
-//         decoration: BoxDecoration(
-//           gradient: LinearGradient(
-//             colors: [
-//               AppColor.formPrimaryColor.withOpacity(0.24),
-//               AppColor.formSecondaryColor.withOpacity(0.24),
-//             ],
-//           ),
-//           border: Border.all(color: AppColor.formBorderColor.withOpacity(0.24)),
-//           borderRadius: BorderRadius.circular(10),
-//           boxShadow: [
-//             BoxShadow(
-//               color: Colors.black.withOpacity(0.4),
-//               offset: const Offset(0, 2),
-//               blurRadius: 4,
-//             ),
-//           ],
-//         ),
-//         child: Column(
-//           crossAxisAlignment: CrossAxisAlignment.start,
-//           children: [
-//             const Text(
-//               "Upcoming Webinar",
-//               style: TextStyle(color: Colors.white70),
-//             ),
-
-//             const SizedBox(height: 10),
-
-//             Text(
-//               "${userDashboardProvider.userDashboardUpcommingAndRecentModel?.data?.upcomingWebinar?.title ?? 'N/A'}",
-//               style: TextStyle(
-//                 color: Colors.white,
-//                 fontWeight: FontWeight.bold,
-//                 fontSize: 22,
-//               ),
-//             ),
-
-//             const SizedBox(height: 8),
-
-//             Text(
-//               formatWebinarDate(
-//                 userDashboardProvider
-//                     .userDashboardUpcommingAndRecentModel
-//                     ?.data
-//                     ?.upcomingWebinar
-//                     ?.startDate,
-//                 userDashboardProvider
-//                     .userDashboardUpcommingAndRecentModel
-//                     ?.data
-//                     ?.upcomingWebinar
-//                     ?.endDate,
-//               ),
-//               style: const TextStyle(color: Colors.white70),
-//             ),
-
-//             const SizedBox(height: 20),
-
-//             Row(
-//               children: [
-//                 // ElevatedButton.icon(
-//                 //   onPressed: () async {
-//                 //     // await userDashboardProvider.launchZoomMeeting(
-//                 //     //   userDashboardProvider
-//                 //     //           .userDashboardUpcommingAndRecentModel
-//                 //     //           ?.data
-//                 //     //           ?.upcomingWebinar!
-//                 //     //           .meetingUrl ??
-//                 //     //       '',
-//                 //     // );
-
-//                 //     // try {
-//                 //     //   await userDashboardProvider.userJoinDataPro(
-//                 //     //     userDashboardProvider
-//                 //     //         .userDashboardUpcommingAndRecentModel
-//                 //     //         ?.data
-//                 //     //         ?.upcomingWebinar
-//                 //     //         ?.webinarId,
-//                 //     //   );
-
-//                 //     //   if (userDashboardProvider.userJoinWebinarModel != null) {
-//                 //     //     final meetingUrl =
-//                 //     //         userDashboardProvider
-//                 //     //             .userDashboardUpcommingAndRecentModel
-//                 //     //             ?.data
-//                 //     //             ?.upcomingWebinar
-//                 //     //             ?.meetingUrl ??
-//                 //     //         '';
-//                 //     //     if (meetingUrl.isEmpty) {
-//                 //     //       ScaffoldMessenger.of(context).showSnackBar(
-//                 //     //         const SnackBar(
-//                 //     //           content: Text(
-//                 //     //             'Unable to open the webinar. Meeting link not found.',
-//                 //     //           ),
-//                 //     //         ),
-//                 //     //       );
-//                 //     //       return;
-//                 //     //     }
-
-//                 //     //     await userDashboardProvider.launchZoomMeeting(
-//                 //     //       meetingUrl,
-//                 //     //     );
-//                 //     //   } else if (userDashboardProvider.failure != null) {
-//                 //     //     AppDialogHelper.showFailureDialog(
-//                 //     //       context: context,
-//                 //     //       failure: userDashboardProvider.failure,
-//                 //     //       provider: userDashboardProvider,
-//                 //     //       onTap: () {
-//                 //     //         userDashboardProvider.clearFailure();
-//                 //     //         Navigator.pop(context);
-//                 //     //       },
-//                 //     //     );
-//                 //     //   } else {
-//                 //     //     ScaffoldMessenger.of(context).showSnackBar(
-//                 //     //       const SnackBar(
-//                 //     //         content: Text(
-//                 //     //           'Something went wrong. Please try again..............',
-//                 //     //         ),
-//                 //     //       ),
-//                 //     //     );
-//                 //     //   }
-//                 //     // } catch (e) {
-//                 //     //   ScaffoldMessenger.of(context).showSnackBar(
-//                 //     //     const SnackBar(
-//                 //     //       content: Text(
-//                 //     //         'Unable to join the webinar. Please try again.',
-//                 //     //       ),
-//                 //     //     ),
-//                 //     //   );
-
-//                 //     //   debugPrint('Join webinar error: $e');
-//                 //     // }
-//                 //   },
-//                 //   icon: const Icon(Icons.video_call),
-//                 //   label: const Text("Join"),
-//                 // ),
-//                 Expanded(
-//                   child: CommonCustomeButtonWidget(
-//                     isTablet: isTablet,
-//                     text: "Join",
-//                     icon: Icons.video_call,
-//                     onTap: () async {
-//                       try {
-//                         await userDashboardProvider.userJoinDataPro(
-//                           userDashboardProvider
-//                               .userDashboardUpcommingAndRecentModel
-//                               ?.data
-//                               ?.upcomingWebinar
-//                               ?.webinarId,
-//                         );
-
-//                         if (userDashboardProvider.userJoinWebinarModel !=
-//                             null) {
-//                           final meetingUrl =
-//                               userDashboardProvider
-//                                   .userDashboardUpcommingAndRecentModel
-//                                   ?.data
-//                                   ?.upcomingWebinar
-//                                   ?.meetingUrl ??
-//                               '';
-//                           if (meetingUrl.isEmpty) {
-//                             ScaffoldMessenger.of(context).showSnackBar(
-//                               const SnackBar(
-//                                 content: Text(
-//                                   'Unable to open the webinar. Meeting link not found.',
-//                                 ),
-//                               ),
-//                             );
-//                             return;
-//                           }
-
-//                           await userDashboardProvider.launchZoomMeeting(
-//                             meetingUrl,
-//                           );
-//                         } else if (userDashboardProvider.failure != null) {
-//                           AppDialogHelper.showFailureDialog(
-//                             context: context,
-//                             failure: userDashboardProvider.failure,
-//                             provider: userDashboardProvider,
-//                             onTap: () {
-//                               userDashboardProvider.clearFailure();
-//                               Navigator.pop(context);
-//                             },
-//                           );
-//                         } else {
-//                           ScaffoldMessenger.of(context).showSnackBar(
-//                             const SnackBar(
-//                               content: Text(
-//                                 'Something went wrong. Please try again..............',
-//                               ),
-//                             ),
-//                           );
-//                         }
-//                       } catch (e) {
-//                         ScaffoldMessenger.of(context).showSnackBar(
-//                           const SnackBar(
-//                             content: Text(
-//                               'Unable to join the webinar. Please try again.',
-//                             ),
-//                           ),
-//                         );
-
-//                         debugPrint('Join webinar error: $e');
-//                       }
-//                     },
-//                   ),
-//                 ),
-
-//                 const Spacer(),
-
-//                 // const Icon(Icons.price_change, color: Colors.white),
-
-//                 // const SizedBox(width: 8),
-//                 webinarPriceLabel(
-//                   isPaid: upcommingWebinars.isPaid,
-//                   price: upcommingWebinars.price,
-//                 ),
-//                 // InkWell(
-//                 //   onTap: () {
-//                 //     // Navigator.pushNamed(
-//                 //     //   context,
-//                 //     //   '/viewallparticipents',
-//                 //     //   arguments: {
-//                 //     //     'courseId':
-//                 //     //         userDashboardProvider
-//                 //     //             .trainerUpcommingAndAssignedModel
-//                 //     //             ?.data
-//                 //     //             ?.upcomingWebinar!
-//                 //     //             .id,
-//                 //     //   },
-//                 //     // );
-//                 //   },
-//                 //   child: Text(
-//                 //     "${userDashboardProvider.userDashboardUpcommingAndRecentModel?.data?.upcomingWebinar?.price}",
-//                 //     style: TextStyle(color: Colors.white),
-//                 //   ),
-//                 // ),
-//               ],
-//             ),
-//           ],
-//         ),
-//       ),
-//     );
-//   }
-// }
-
 class StatsGrid extends StatelessWidget {
   final UserDashboardProvider userDashboardProvider;
   final bool isTablet;
@@ -1513,7 +673,7 @@ class StatsGrid extends StatelessWidget {
         mainAxisExtent: isTablet ? 150 : 142,
       ),
       itemBuilder: (context, index) {
-        return DashboardTile(item: items[index]);
+        return DashboardTile(item: items[index], animationIndex: index);
       },
     );
   }
@@ -1530,8 +690,13 @@ class DashboardItem {
 
 class DashboardTile extends StatefulWidget {
   final DashboardItem item;
+  final int animationIndex;
 
-  const DashboardTile({super.key, required this.item});
+  const DashboardTile({
+    super.key,
+    required this.item,
+    required this.animationIndex,
+  });
 
   @override
   State<DashboardTile> createState() => _DashboardTileState();
@@ -1539,11 +704,11 @@ class DashboardTile extends StatefulWidget {
 
 class _DashboardTileState extends State<DashboardTile>
     with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
+  late final AnimationController _controller;
 
-  late Animation<double> _glowAnimation;
-  late Animation<double> _scaleAnimation;
-  late Animation<double> _opacityAnimation;
+  late final Animation<double> _fadeAnimation;
+  late final Animation<double> _scaleAnimation;
+  late final Animation<Offset> _slideAnimation;
 
   bool get isUpcomingWebinar => widget.item.title == 'Upcoming Webinars';
 
@@ -1551,98 +716,66 @@ class _DashboardTileState extends State<DashboardTile>
   void initState() {
     super.initState();
 
-    // Only animate Upcoming Webinars
-    if (isUpcomingWebinar) {
-      _controller = AnimationController(
-        vsync: this,
-        duration: const Duration(seconds: 2),
-      )..repeat(reverse: true);
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 650),
+    );
 
-      _glowAnimation = Tween<double>(
-        begin: 0.10,
-        end: 0.35,
-      ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+    _fadeAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutCubic,
+    );
 
-      _scaleAnimation = Tween<double>(
-        begin: 0.96,
-        end: 1.0,
-      ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+    _scaleAnimation = Tween<double>(
+      begin: 0.82,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
 
-      _opacityAnimation = Tween<double>(
-        begin: 0.35,
-        end: 1.0,
-      ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
-    }
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.18),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+
+    // Stagger the cards.
+    Future.delayed(
+      Duration(milliseconds: 100 + (widget.animationIndex * 100)),
+      () {
+        if (mounted) {
+          _controller.forward();
+        }
+      },
+    );
   }
 
   @override
   void dispose() {
-    if (isUpcomingWebinar) {
-      _controller.dispose();
-    }
-
+    _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (isUpcomingWebinar) {
-      return AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) {
-          return _buildCard(
-            glow: _glowAnimation.value,
-            scale: _scaleAnimation.value,
-            pulse: _opacityAnimation.value,
-          );
-        },
-      );
-    }
-
-    // Other cards are completely static
-    return _buildCard(glow: 0.0, scale: 1.0, pulse: 1.0);
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: ScaleTransition(scale: _scaleAnimation, child: _buildCard()),
+      ),
+    );
   }
 
-  Widget _buildCard({
-    required double glow,
-    required double scale,
-    required double pulse,
-  }) {
+  Widget _buildCard() {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-
-        // ============================================================
-        // PREMIUM BLACK BACKGROUND
-        // ============================================================
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [Color(0xFF191919), Color(0xFF111111), Color(0xFF0B0B0B)],
         ),
-
-        // ============================================================
-        // GOLD BORDER
-        // ============================================================
-        border: Border.all(
-          color: AppColor.gold.withOpacity(
-            isUpcomingWebinar ? 0.20 + (glow * 0.35) : 0.20,
-          ),
-          width: 1,
-        ),
-
-        // ============================================================
-        // SHADOW
-        // ============================================================
-        boxShadow: [
-          if (isUpcomingWebinar)
-            BoxShadow(
-              color: AppColor.gold.withOpacity(glow * 0.18),
-              blurRadius: 24,
-              spreadRadius: 1,
-            ),
-
-          const BoxShadow(
+        border: Border.all(color: AppColor.gold.withOpacity(0.20), width: 1),
+        boxShadow: const [
+          BoxShadow(
             color: Color(0x66000000),
             blurRadius: 12,
             offset: Offset(0, 7),
@@ -1653,35 +786,7 @@ class _DashboardTileState extends State<DashboardTile>
         borderRadius: BorderRadius.circular(20),
         child: Stack(
           children: [
-            // ==========================================================
-            // ANIMATED GOLD GLOW
-            // ONLY UPCOMING WEBINAR
-            // ==========================================================
-            if (isUpcomingWebinar)
-              Positioned(
-                right: -35,
-                top: -35,
-                child: Transform.scale(
-                  scale: scale,
-                  child: Container(
-                    width: 110,
-                    height: 110,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(
-                        colors: [
-                          AppColor.gold.withOpacity(glow * 0.45),
-                          Colors.transparent,
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-
-            // ==========================================================
-            // TOP GOLD LINE
-            // ==========================================================
+            // Top gold line
             Positioned(
               top: 0,
               left: 20,
@@ -1702,9 +807,7 @@ class _DashboardTileState extends State<DashboardTile>
               ),
             ),
 
-            // ==========================================================
-            // BOTTOM GOLD LINE
-            // ==========================================================
+            // Bottom gold line
             Positioned(
               bottom: 0,
               left: 0,
@@ -1716,9 +819,7 @@ class _DashboardTileState extends State<DashboardTile>
                     colors: [
                       Colors.transparent,
                       AppColor.gold.withOpacity(0.20),
-                      AppColor.goldLight.withOpacity(
-                        isUpcomingWebinar ? 0.35 + (glow * 0.35) : 0.35,
-                      ),
+                      AppColor.goldLight.withOpacity(0.35),
                       AppColor.gold.withOpacity(0.20),
                       Colors.transparent,
                     ],
@@ -1727,46 +828,27 @@ class _DashboardTileState extends State<DashboardTile>
               ),
             ),
 
-            // ==========================================================
-            // CONTENT
-            // ==========================================================
             Padding(
               padding: const EdgeInsets.all(15),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ======================================================
-                  // TOP ROW
-                  // ======================================================
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // --------------------------------------------------
-                      // ICON
-                      // --------------------------------------------------
                       Container(
                         width: 44,
                         height: 44,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(13),
-
                           gradient: const LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                             colors: [Color(0xFF2B2418), Color(0xFF17130D)],
                           ),
-
                           border: Border.all(
                             color: AppColor.gold.withOpacity(0.28),
                           ),
-
-                          boxShadow: [
-                            if (isUpcomingWebinar)
-                              BoxShadow(
-                                color: AppColor.gold.withOpacity(glow * 0.18),
-                                blurRadius: 12,
-                              ),
-                          ],
                         ),
                         child: Icon(
                           widget.item.icon,
@@ -1777,60 +859,41 @@ class _DashboardTileState extends State<DashboardTile>
 
                       const Spacer(),
 
-                      // ==================================================
-                      // LIVE BADGE
-                      // ONLY UPCOMING WEBINAR
-                      // ==================================================
                       if (isUpcomingWebinar)
-                        AnimatedOpacity(
-                          duration: const Duration(milliseconds: 200),
-                          opacity: pulse,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 5,
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColor.gold.withOpacity(0.07),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: AppColor.gold.withOpacity(0.20),
                             ),
-                            decoration: BoxDecoration(
-                              color: AppColor.gold.withOpacity(0.07),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: AppColor.gold.withOpacity(0.20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  color: AppColor.goldLight,
+                                  shape: BoxShape.circle,
+                                ),
                               ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  width: 6,
-                                  height: 6,
-                                  decoration: BoxDecoration(
-                                    color: AppColor.goldLight,
-                                    shape: BoxShape.circle,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: AppColor.gold.withOpacity(
-                                          pulse * 0.8,
-                                        ),
-                                        blurRadius: 8,
-                                        spreadRadius: 1,
-                                      ),
-                                    ],
-                                  ),
+                              const SizedBox(width: 5),
+                              const Text(
+                                'LIVE',
+                                style: TextStyle(
+                                  color: AppColor.goldLight,
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.9,
                                 ),
-
-                                const SizedBox(width: 5),
-
-                                const Text(
-                                  'LIVE',
-                                  style: TextStyle(
-                                    color: AppColor.goldLight,
-                                    fontSize: 8,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 0.9,
-                                  ),
-                                ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ),
                     ],
@@ -1838,9 +901,6 @@ class _DashboardTileState extends State<DashboardTile>
 
                   const SizedBox(height: 11),
 
-                  // ======================================================
-                  // TITLE
-                  // ======================================================
                   Text(
                     widget.item.title,
                     maxLines: 1,
@@ -1855,9 +915,6 @@ class _DashboardTileState extends State<DashboardTile>
 
                   const SizedBox(height: 5),
 
-                  // ======================================================
-                  // VALUE
-                  // ======================================================
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
@@ -1903,264 +960,6 @@ class _DashboardTileState extends State<DashboardTile>
         ),
       ),
     );
-  }
-}
-
-class WebinarList extends StatelessWidget {
-  final UserDashboardProvider userDashboardProvider;
-  const WebinarList({required this.userDashboardProvider, super.key});
-  @override
-  Widget build(BuildContext context) {
-    final webinars =
-        userDashboardProvider
-            .userDashboardUpcommingAndRecentModel
-            ?.data
-            ?.assignedWebinars ??
-        [];
-
-    if (webinars.isEmpty) {
-      return const SizedBox.shrink();
-    }
-    return ListView.separated(
-      padding: EdgeInsets.all(0),
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: webinars.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        return WebinarTile(
-          title: webinars[index].title ?? '',
-          status: _getStatusText(webinars[index].status),
-          students: '0',
-          startDateTime: webinars[index].startDate ?? '',
-          recentWebinarId: webinars[index].webinarId.toString() ?? '',
-          isPaid: webinars[index].isPaid,
-          price: webinars[index].price,
-        );
-      },
-    );
-  }
-}
-
-class WebinarTile extends StatelessWidget {
-  final String title;
-  final String status;
-  final String students;
-  final String startDateTime;
-  final String? recentWebinarId;
-  final String? isPaid;
-  final String? price;
-
-  const WebinarTile({
-    super.key,
-    required this.title,
-    required this.status,
-    required this.students,
-    required this.startDateTime,
-    required this.recentWebinarId,
-    required this.isPaid,
-    required this.price,
-  });
-  // ============================================================
-  // STATUS COLOR
-  // ============================================================
-
-  Color _statusColor() {
-    switch (status.toLowerCase()) {
-      case 'live':
-        return Colors.redAccent;
-
-      case 'scheduled':
-        return Colors.orangeAccent;
-
-      case 'completed':
-        return Colors.greenAccent;
-
-      case 'cancelled':
-        return Colors.redAccent;
-
-      default:
-        return Colors.white70;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final dateTime = DateTime.parse(startDateTime).toLocal();
-    final formattedDate = DateFormat('dd MMM yyyy').format(dateTime);
-    final formattedTime = DateFormat('hh:mm a').format(dateTime);
-
-    return InkWell(
-      onTap: () {
-        Navigator.pushNamed(
-          context,
-          '/userwebinarcoursedetailpage',
-          arguments: {'courseId': recentWebinarId},
-        );
-      },
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColor.cardBackground,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColor.gold.withOpacity(.14)),
-        ),
-        child: Row(
-          children: [
-            // Webinar icon
-            Container(
-              height: 48,
-              width: 48,
-              decoration: BoxDecoration(
-                color: AppColor.gold.withOpacity(.10),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: const Icon(
-                Icons.video_collection_outlined,
-                color: AppColor.gold,
-                size: 24,
-              ),
-            ),
-
-            const SizedBox(width: 14),
-
-            // Content
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Title + status
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(width: 8),
-
-                      _StatusBadge(status: status, color: _statusColor()),
-                      // Status
-                      // Container(
-                      //   padding: const EdgeInsets.symmetric(
-                      //     horizontal: 8,
-                      //     vertical: 4,
-                      //   ),
-                      //   decoration: BoxDecoration(
-                      //     color: Colors.green.withOpacity(.12),
-                      //     borderRadius: BorderRadius.circular(8),
-                      //   ),
-                      //   child: Text(
-                      //     status,
-                      //     style: const TextStyle(
-                      //       color: Colors.greenAccent,
-                      //       fontSize: 11,
-                      //       fontWeight: FontWeight.w600,
-                      //     ),
-                      //   ),
-                      // ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 9),
-
-                  // Date and time
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.calendar_today_outlined,
-                        color: Colors.white54,
-                        size: 14,
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        formattedDate,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                        ),
-                      ),
-
-                      const SizedBox(width: 12),
-
-                      const Icon(
-                        Icons.access_time,
-                        color: Colors.white54,
-                        size: 14,
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        formattedTime,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  // price
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.people_outline,
-                        color: Colors.white54,
-                        size: 15,
-                      ),
-                      const SizedBox(width: 5),
-                      webinarPriceLabel(isPaid: isPaid, price: price),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(width: 10),
-
-            const Icon(
-              Icons.arrow_forward_ios,
-              color: Colors.white38,
-              size: 16,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-String _getStatusText(dynamic status) {
-  if (status == null) {
-    return 'Unknown';
-  }
-
-  final String value = status.toString();
-
-  switch (value) {
-    case '2':
-      return 'Scheduled';
-
-    case '3':
-      return 'Live';
-
-    case '4':
-      return 'Completed';
-
-    case '5':
-      return 'Cancelled';
-
-    default:
-      return value.isEmpty ? 'Unknown' : value;
   }
 }
 

@@ -15,9 +15,15 @@ class UserAllWebinarImplimentation implements UserWebinarRepository {
   Future<Either<Failure, UserFullListWebinarModel>> getAllUserWebinars(
     String? status,
     String? search,
-  ) async {
+    int? paymentStatus, {
+    int page = 1,
+    int pageSize = 5,
+  }) async {
     try {
-      final queryParameters = <String, String>{};
+      final queryParameters = <String, String>{
+        'Page': page.toString(),
+        'PageSize': pageSize.toString(),
+      };
       // Add status only when it has a value
       if (status != null && status.isNotEmpty) {
         queryParameters['TimeFilter'] = status;
@@ -26,6 +32,11 @@ class UserAllWebinarImplimentation implements UserWebinarRepository {
       // Add search only when it has a value
       if (search != null && search.isNotEmpty) {
         queryParameters['Search'] = search;
+      }
+
+      // PaymentStatus
+      if (paymentStatus != null) {
+        queryParameters['PaymentStatus'] = paymentStatus.toString();
       }
 
       final uri = Uri.parse(
