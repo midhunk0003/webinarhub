@@ -1,14 +1,3 @@
-
-PRAGMA foreign_keys = false;
-
-DROP TABLE IF EXISTS "worker_imported_scripts";
-CREATE TABLE "worker_imported_scripts" (
-"worker_id" text NOT NULL,
-"url" TEXT NOT NULL,
-"headers" text NOT NULL,
-"content" blob NOT NULL,
-PRIMARY KEY("worker_id","url"),
-CONSTRAINT "worker" FOREIGN KEY ("worker_id") REFERENCES "workers" ("worker_id") ON DELETE CASCADE
-);
-
-PRAGMA foreign_keys = true;
+version https://git-lfs.github.com/spec/v1
+oid sha256:5d0155170824c6e91625efe4ae8ac5147d968950667cd7030b147fbd5bac5505
+size 381

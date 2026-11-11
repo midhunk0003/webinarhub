@@ -1,30 +1,3 @@
-/**
- * @file MobileRTCRawLiveStreamInfo.h
- * @brief Raw live streaming information and configuration.
- */
-
-#import <Foundation/Foundation.h>
-
-/**
- * @class MobileRTCRawLiveStreamInfo
- * @brief A class that contains raw live stream information, such as the broadcast name and URL.
- */
-@interface MobileRTCRawLiveStreamInfo : NSObject
-
-/**
- * @brief The user ID.
- */
-@property(nonatomic, assign, readonly) NSUInteger userId;
-
-/**
- * @brief The broadcast URL (hosted by you or the URL to your Zoom App Marketplace page).
- */
-@property(nonatomic, copy, readonly) NSString * _Nullable broadcastUrl;
-
-/**
- * @brief The broadcast name.
- */
-@property(nonatomic, copy, readonly) NSString * _Nullable broadcastName;
-
-@end
-
+version https://git-lfs.github.com/spec/v1
+oid sha256:3bd4db5cb905cff8818e66c8e21f39b686967e81a3ebed57f548e2020640c766
+size 713

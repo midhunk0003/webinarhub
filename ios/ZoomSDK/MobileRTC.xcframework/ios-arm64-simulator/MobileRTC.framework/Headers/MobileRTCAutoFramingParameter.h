@@ -1,25 +1,3 @@
-/**
- * @file MobileRTCAutoFramingParameter.h
- * @brief Auto-framing parameters.
- */
-
-#import <Foundation/Foundation.h>
-#import <MobileRTC/MobileRTCConstants.h>
-
-/**
- * @class MobileRTCAutoFramingParameter
- * @brief A class that contains auto-framing parameters.
- */
-@interface MobileRTCAutoFramingParameter : NSObject
-
-/**
- * @brief The ratio of auto framing. For each mode, the ratio is different.
- */
-@property (nonatomic, assign) CGFloat ratio;
-
-/**
- * @brief The auto framing fail strategy.
- */
-@property (nonatomic, assign) MobileRTCFaceRecognitionFailStrategy failStrategy;
-@end
-
+version https://git-lfs.github.com/spec/v1
+oid sha256:a79b6f88452b2f93bf824f80684c6c02b0e9013415f6949fbb7fd8b60ded4ea5
+size 586

@@ -1,25 +1,3 @@
-/**
- * @file MobileRTCShareSender.h
- * @brief Screen sharing sender functionality.
- */
-
-#import <Foundation/Foundation.h>
-#include <MobileRTC/MobileRTCConstants.h>
-
-/**
- * @class MobileRTCShareSender
- * @brief Sends share raw data in a meeting.
- */
-@interface MobileRTCShareSender : NSObject
-
-/**
- * @brief Sends share raw data in a meeting.
- * @param frameBuffer The buffer of the data to send.
- * @param width The width of the data to send.
- * @param height The height of the data to send.
- * @param dataLength The length of the data to send.
- * @param format The format of the data to send.
- */
-- (void)sendShareFrameBuffer:(char *)frameBuffer width:(NSUInteger)width height:(NSUInteger)height frameLength:(NSUInteger)dataLength format:(MobileRTCFrameDataFormat)format;
-
-@end
+version https://git-lfs.github.com/spec/v1
+oid sha256:3ee0765996c7e070d9e9d4af235ac23a5fc5c89df5febd871d684a1c348825b4
+size 779

@@ -1,3 +1,5 @@
+ios/ZoomSDK/** filter=lfs diff=lfs merge=lfs -text
+android/mobilertc/*.aar filter=lfs diff=lfs merge=lfs -text
 /android/mobilertc/mobilertc.aar filter=lfs diff=lfs merge=lfs -text
 /linux.zip filter=lfs diff=lfs merge=lfs -text
 /ios/ZoomSDK/MobileRTC.xcframework/ios-arm64-simulator/MobileRTC.framework/MobileRTC filter=lfs diff=lfs merge=lfs -text
