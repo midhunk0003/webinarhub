@@ -11,6 +11,7 @@ import 'package:lms/data/model/user_full_list_webinar_model/user_full_list_webin
 import 'package:lms/presentation/provider/user_provider/user_all_wbinar_provider.dart';
 import 'package:lms/presentation/screen/user/home_screen/widgets/home_header_section.dart';
 import 'package:lms/presentation/screen/user/home_screen/widgets/webinar_price_label.dart';
+import 'package:lms/presentation/widgets/common_empty_state_home.dart';
 import 'package:lms/presentation/widgets/diloges/app_dialog_helper.dart';
 import 'package:lms/presentation/widgets/network_retry_widget.dart';
 import 'package:lms/presentation/widgets/reusablebackground/reusablebackground.dart';
@@ -120,6 +121,7 @@ class _UserAllWebinarScreenState extends State<UserAllWebinarScreen> {
       }
     }
   }
+
   // ============================================================
   // LOAD WEBINARS
   // ============================================================
@@ -502,7 +504,10 @@ class WebinarList extends StatelessWidget {
     // ------------------------------------------------------------
 
     if (items.isEmpty) {
-      return const _WebinarEmptyState();
+      return WebinarEmptyState(
+        title: 'No Webinars Found',
+        subTitle: 'There are no webinars available for this filter.',
+      );
     }
 
     // ------------------------------------------------------------
@@ -917,7 +922,7 @@ class _WebinarLoadingState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: List.generate(
-        4,
+        3,
         (index) => const Padding(
           padding: EdgeInsets.only(bottom: 12),
           child: _WebinarShimmerTile(),

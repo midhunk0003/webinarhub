@@ -6,7 +6,6 @@ import 'package:lms/core/colors.dart';
 import 'package:lms/core/failure.dart';
 import 'package:lms/data/model/trainer_all_webinar_participents_model/trainer_all_webinar_participents_model.dart';
 import 'package:lms/presentation/provider/trainer_provider/trainer_course_provider.dart';
-import 'package:lms/presentation/screen/user/home_screen/widgets/home_header_section.dart';
 import 'package:lms/presentation/widgets/common_custom_app_bar_widget.dart';
 import 'package:lms/presentation/widgets/diloges/app_dialog_helper.dart';
 import 'package:lms/presentation/widgets/network_retry_widget.dart';
@@ -24,7 +23,9 @@ class ViewAllParticipents extends StatefulWidget {
 
 class _ViewAllParticipentsState extends State<ViewAllParticipents> {
   final TextEditingController _searchController = TextEditingController();
+
   Timer? _searchDebounce;
+
   bool _isDialogShowing = false;
 
   @override
@@ -32,8 +33,17 @@ class _ViewAllParticipentsState extends State<ViewAllParticipents> {
     super.initState();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initialData();
+      if (mounted) {
+        _initialData();
+      }
     });
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.dispose();
+    super.dispose();
   }
 
   // ============================================================
@@ -45,7 +55,10 @@ class _ViewAllParticipentsState extends State<ViewAllParticipents> {
 
     final provider = context.read<TrainerCourseProvider>();
 
-    await provider.getParticipantsListPro(widget.courseId, '');
+    await provider.getParticipantsListPro(
+      widget.courseId,
+      _searchController.text.trim(),
+    );
 
     if (!mounted) return;
 
@@ -59,15 +72,11 @@ class _ViewAllParticipentsState extends State<ViewAllParticipents> {
   // ============================================================
 
   Future<void> handleFailure(TrainerCourseProvider provider) async {
-    if (!mounted) return;
+    if (!mounted || _isDialogShowing) return;
 
     final failure = provider.failure;
 
     if (failure == null || failure is NetworkFailure) {
-      return;
-    }
-
-    if (_isDialogShowing) {
       return;
     }
 
@@ -81,7 +90,7 @@ class _ViewAllParticipentsState extends State<ViewAllParticipents> {
         onTap: () {
           provider.clearFailure();
 
-          if (Navigator.canPop(context)) {
+          if (mounted && Navigator.canPop(context)) {
             Navigator.pop(context);
           }
         },
@@ -90,6 +99,10 @@ class _ViewAllParticipentsState extends State<ViewAllParticipents> {
       _isDialogShowing = false;
     }
   }
+
+  // ============================================================
+  // SEARCH
+  // ============================================================
 
   void _onSearchChanged(String value) {
     _searchDebounce?.cancel();
@@ -100,7 +113,19 @@ class _ViewAllParticipentsState extends State<ViewAllParticipents> {
       final provider = context.read<TrainerCourseProvider>();
 
       await provider.getParticipantsListPro(widget.courseId, value.trim());
+
+      if (!mounted) return;
+
+      if (provider.failure != null && provider.failure is! NetworkFailure) {
+        await handleFailure(provider);
+      }
     });
+  }
+
+  void _clearSearch() {
+    _searchDebounce?.cancel();
+    _searchController.clear();
+    _onSearchChanged('');
   }
 
   // ============================================================
@@ -116,82 +141,86 @@ class _ViewAllParticipentsState extends State<ViewAllParticipents> {
 
           return RefreshIndicator(
             onRefresh: _initialData,
-            color: AppColor.formPrimaryColor,
+            color: AppColor.gold,
+            backgroundColor: AppColor.cardBackground,
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.only(bottom: 100),
+
               child: ConstrainedBox(
                 constraints: BoxConstraints(minHeight: constraints.maxHeight),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(height: isTablet ? 80 : 66),
+                    SizedBox(height: isTablet ? 65 : 50),
 
-                    // ==================================================
-                    // HEADER
-                    // ==================================================
-                    // App Bar
                     CommonCustomAppBarWidget(
                       isTablet: isTablet,
                       showBackButton: true,
-                      title: "",
+                      title: '',
                       onBackButtonPressed: () {
                         Navigator.pop(context);
                       },
-                      onShareButtonPressed: () {
-                        print('share');
-                      },
+                      onShareButtonPressed: () {},
                       showShareButton: false,
                     ),
 
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 24),
 
-                    // ==================================================
-                    // SEARCH BAR
-                    // ==================================================
-                    Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isTablet ? 8 : 0,
-                      ),
-                      child: _WebinarSearchBar(
-                        controller: _searchController,
-                        onChanged: _onSearchChanged,
-                      ),
+                    // PAGE TITLE
+                    _PageHeading(isTablet: isTablet),
+
+                    const SizedBox(height: 24),
+
+                    // SEARCH
+                    _WebinarSearchBar(
+                      controller: _searchController,
+                      onChanged: _onSearchChanged,
+                      onClear: _clearSearch,
                     ),
 
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 22),
 
-                    // ==================================================
-                    // PARTICIPANTS
-                    // ==================================================
+                    // PARTICIPANT CONTENT
                     Consumer<TrainerCourseProvider>(
                       builder: (context, provider, child) {
                         final failure = provider.failure;
 
-                        // --------------------------------------------
-                        // NETWORK ERROR
-                        // --------------------------------------------
-
                         if (failure is NetworkFailure) {
-                          return NetWorkRetry(
-                            failureMessage:
-                                provider.failure?.message ??
-                                'No internet connection',
-                            onRetry: () async {
-                              await _initialData();
-                            },
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 30),
+                            child: NetWorkRetry(
+                              failureMessage:
+                                  failure.message ?? 'No internet connection',
+                              onRetry: _initialData,
+                            ),
                           );
                         }
 
-                        // --------------------------------------------
-                        // PARTICIPANT LIST
-                        // --------------------------------------------
+                        if (provider.isLoadingListOfParticipents) {
+                          return const _LoadingParticipants();
+                        }
 
-                        return _Participants(trainerCourseProvider: provider);
+                        final List<ParticipantItem> participants =
+                            provider
+                                .trainerAllWebinarParticipentsModel
+                                ?.data
+                                ?.items ??
+                            [];
+
+                        if (participants.isEmpty) {
+                          return _EmptyParticipants(
+                            hasSearch: _searchController.text.trim().isNotEmpty,
+                          );
+                        }
+
+                        return _Participants(
+                          participants: participants,
+                          isTablet: isTablet,
+                        );
                       },
                     ),
 
-                    const SizedBox(height: 30),
+                    const SizedBox(height: 24),
                   ],
                 ),
               ),
@@ -203,201 +232,273 @@ class _ViewAllParticipentsState extends State<ViewAllParticipents> {
   }
 }
 
-// ============================================================================
-// PARTICIPANTS
-// ============================================================================
+// ================================================================
+// PAGE HEADING
+// ================================================================
 
-class _Participants extends StatelessWidget {
-  final TrainerCourseProvider trainerCourseProvider;
+class _PageHeading extends StatelessWidget {
+  final bool isTablet;
 
-  const _Participants({required this.trainerCourseProvider, super.key});
+  const _PageHeading({required this.isTablet});
 
   @override
   Widget build(BuildContext context) {
-    // ============================================================
-    // LOADING
-    // ============================================================
-
-    if (trainerCourseProvider.isLoadingListOfParticipents) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 60),
-        child: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    // ============================================================
-    // GET PARTICIPANTS
-    // ============================================================
-
-    final List<ParticipantItem> participants =
-        trainerCourseProvider.trainerAllWebinarParticipentsModel?.data?.items ??
-        [];
-
-    // ============================================================
-    // EMPTY
-    // ============================================================
-
-    if (participants.isEmpty) {
-      return const _EmptyParticipants();
-    }
-
-    // ============================================================
-    // RESPONSIVE
-    // ============================================================
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final bool isTablet = constraints.maxWidth >= 600;
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            // ==================================================
-            // PARTICIPANT COUNT HEADER
-            // ==================================================
             Container(
-              width: double.infinity,
-              padding: EdgeInsets.all(isTablet ? 20 : 16),
+              width: 4,
+              height: isTablet ? 35 : 31,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    AppColor.formPrimaryColor.withOpacity(0.14),
-                    AppColor.formSecondaryColor.withOpacity(0.14),
-                  ],
+                gradient: const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [AppColor.goldLight, AppColor.goldDark],
                 ),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: AppColor.formPrimaryColor.withOpacity(0.12),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColor.formPrimaryColor.withOpacity(0.05),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  // ICON
-                  Container(
-                    width: 46,
-                    height: 46,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          AppColor.formPrimaryColor.withOpacity(0.16),
-                          AppColor.formSecondaryColor.withOpacity(0.16),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      Icons.groups_rounded,
-                      color: AppColor.formPrimaryColor,
-                      size: 25,
-                    ),
-                  ),
-
-                  const SizedBox(width: 14),
-
-                  // COUNT
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Total Participants',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: AppColor.ghostwhite.withOpacity(0.75),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          '${participants.length}',
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                            color: AppColor.ghostwhite,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // ENROLLED
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 7,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.10),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 7,
-                          height: 7,
-                          decoration: const BoxDecoration(
-                            color: Colors.green,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        const Text(
-                          'Enrolled',
-                          style: TextStyle(
-                            color: Colors.green,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                borderRadius: BorderRadius.circular(10),
               ),
             ),
-
-            const SizedBox(height: 18),
-
-            // ==================================================
-            // PARTICIPANT LIST
-            // ==================================================
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: participants.length,
-              separatorBuilder: (context, index) {
-                return const SizedBox(height: 12);
-              },
-              itemBuilder: (context, index) {
-                final participant = participants[index];
-
-                return _ParticipantCard(
-                  participant: participant,
-                  index: index,
-                  isTablet: isTablet,
-                );
-              },
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'All Participants',
+                style: TextStyle(
+                  fontSize: isTablet ? 29 : 25,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.6,
+                  color: AppColor.primaryText,
+                ),
+              ),
             ),
+            const Icon(Icons.groups_rounded, size: 28, color: AppColor.gold),
           ],
-        );
-      },
+        ),
+        const SizedBox(height: 9),
+        Padding(
+          padding: const EdgeInsets.only(left: 16),
+          child: Text(
+            'Manage and view your webinar participants',
+            style: TextStyle(
+              fontSize: isTablet ? 14 : 12.5,
+              color: AppColor.secondaryText.withOpacity(0.75),
+              height: 1.5,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
 
-// ============================================================================
+// ================================================================
+// PARTICIPANTS
+// ================================================================
+
+class _Participants extends StatelessWidget {
+  final List<ParticipantItem> participants;
+  final bool isTablet;
+
+  const _Participants({required this.participants, required this.isTablet});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // SUMMARY CARD
+        _ParticipantSummaryCard(count: participants.length, isTablet: isTablet),
+        // const SizedBox(height: 24),
+        // // SECTION HEADER
+        // Row(
+        //   children: [
+        //     const Expanded(
+        //       child: Text(
+        //         'Participant List',
+        //         style: TextStyle(
+        //           color: AppColor.primaryText,
+        //           fontSize: 17,
+        //           fontWeight: FontWeight.w700,
+        //         ),
+        //       ),
+        //     ),
+        //     Container(
+        //       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+        //       decoration: BoxDecoration(
+        //         color: AppColor.gold.withOpacity(0.09),
+        //         borderRadius: BorderRadius.circular(20),
+        //         border: Border.all(color: AppColor.gold.withOpacity(0.24)),
+        //       ),
+        //       child: Text(
+        //         '${participants.length} ${participants.length == 1 ? 'person' : 'people'}',
+        //         style: const TextStyle(
+        //           color: AppColor.goldLight,
+        //           fontSize: 11,
+        //           fontWeight: FontWeight.w600,
+        //         ),
+        //       ),
+        //     ),
+        //   ],
+        // ),
+        const SizedBox(height: 14),
+
+        // CARDS
+        ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.all(0),
+          itemCount: participants.length,
+          separatorBuilder: (context, index) => const SizedBox(height: 13),
+          itemBuilder: (context, index) {
+            return _ParticipantCard(
+              participant: participants[index],
+              index: index,
+              isTablet: isTablet,
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+// ================================================================
+// SUMMARY CARD
+// ================================================================
+
+class _ParticipantSummaryCard extends StatelessWidget {
+  final int count;
+  final bool isTablet;
+
+  const _ParticipantSummaryCard({required this.count, required this.isTablet});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(isTablet ? 24 : 20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF292318), Color(0xFF171510), Color(0xFF101010)],
+        ),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColor.gold.withOpacity(0.38)),
+        boxShadow: [
+          BoxShadow(
+            color: AppColor.goldDark.withOpacity(0.08),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // ICON
+          Container(
+            width: isTablet ? 62 : 56,
+            height: isTablet ? 62 : 56,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [AppColor.goldLight, AppColor.gold, AppColor.goldDark],
+              ),
+              borderRadius: BorderRadius.circular(17),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColor.gold.withOpacity(0.18),
+                  blurRadius: 15,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.groups_rounded,
+              color: AppColor.buttonText,
+              size: 29,
+            ),
+          ),
+
+          const SizedBox(width: 16),
+
+          // COUNT
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'TOTAL PARTICIPANTS',
+                  style: TextStyle(
+                    color: AppColor.goldLight.withOpacity(0.85),
+                    fontSize: 10,
+                    letterSpacing: 1.3,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  '$count',
+                  style: TextStyle(
+                    color: AppColor.primaryText,
+                    fontSize: isTablet ? 33 : 29,
+                    height: 1.1,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  count == 1
+                      ? 'Registered participant'
+                      : 'Registered participants',
+                  style: TextStyle(
+                    color: AppColor.secondaryText.withOpacity(0.72),
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // STATUS
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: BoxDecoration(
+              color: const Color(0xFF183326),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.greenAccent.withOpacity(0.17)),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.check_circle_rounded,
+                  color: Color(0xFF7BD9A2),
+                  size: 13,
+                ),
+                SizedBox(width: 5),
+                Text(
+                  'Loaded',
+                  style: TextStyle(
+                    color: Color(0xFF7BD9A2),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ================================================================
 // PARTICIPANT CARD
-// ============================================================================
+// ================================================================
 
 class _ParticipantCard extends StatelessWidget {
   final ParticipantItem participant;
@@ -412,23 +513,22 @@ class _ParticipantCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String name =
-        participant.userFullName?.trim().isNotEmpty == true
-            ? participant.userFullName!.trim()
-            : 'Unknown Participant';
+    final String name = _safeText(
+      participant.userFullName,
+      'Unknown Participant',
+    );
 
-    final String email =
-        participant.userEmail?.trim().isNotEmpty == true
-            ? participant.userEmail!.trim()
-            : 'No email available';
+    final String email = _safeText(participant.userEmail, 'No email available');
 
-    final String initials = _getInitials(name);
+    final String enrollmentStatus = _safeText(
+      participant.enrollmentStatusName,
+      'Unknown',
+    );
 
-    final String enrollmentStatus =
-        participant.enrollmentStatusName ?? 'Unknown';
-
-    final String enrollmentSource =
-        participant.enrollmentSourceName ?? 'Unknown';
+    final String enrollmentSource = _safeText(
+      participant.enrollmentSourceName,
+      'Unknown source',
+    );
 
     final String enrollmentDate = _formatDate(participant.enrollmentDate);
 
@@ -436,181 +536,165 @@ class _ParticipantCard extends StatelessWidget {
         participant.enrollmentStatus == 2 ||
         enrollmentStatus.toLowerCase() == 'enrolled';
 
+    final Color statusColor =
+        isEnrolled ? const Color(0xFF7BD9A2) : AppColor.goldLight;
+
     return Container(
-      padding: EdgeInsets.all(isTablet ? 20 : 16),
+      padding: EdgeInsets.all(isTablet ? 21 : 16),
       decoration: BoxDecoration(
-        // ==========================================================
-        // MAIN CARD GRADIENT
-        // ==========================================================
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppColor.formPrimaryColor.withOpacity(0.24),
-            AppColor.formSecondaryColor.withOpacity(0.24),
-          ],
-        ),
-
-        borderRadius: BorderRadius.circular(18),
-
-        // ==========================================================
-        // THEME BORDER
-        // ==========================================================
-        border: Border.all(color: AppColor.formPrimaryColor.withOpacity(0.15)),
-
-        // ==========================================================
-        // SOFT SHADOW
-        // ==========================================================
+        color: AppColor.cardBackground,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColor.gold.withOpacity(0.20)),
         boxShadow: [
           BoxShadow(
-            color: AppColor.formPrimaryColor.withOpacity(0.06),
-            blurRadius: 14,
+            color: AppColor.shadow.withOpacity(0.35),
+            blurRadius: 16,
             offset: const Offset(0, 5),
           ),
         ],
       ),
-
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ======================================================
-          // AVATAR
-          // ======================================================
+          // TOP SECTION
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _ParticipantAvatar(name: name, size: isTablet ? 58 : 52),
+
+              const SizedBox(width: 14),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 2),
+                    Text(
+                      name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppColor.primaryText,
+                        fontSize: isTablet ? 16 : 15,
+                        fontWeight: FontWeight.w700,
+                        height: 1.35,
+                      ),
+                    ),
+                    const SizedBox(height: 7),
+
+                    // EMAIL
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.only(top: 1),
+                          child: Icon(
+                            Icons.email_outlined,
+                            size: 14,
+                            color: AppColor.gold,
+                          ),
+                        ),
+                        const SizedBox(width: 7),
+                        Expanded(
+                          child: Text(
+                            email,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: AppColor.secondaryText.withOpacity(0.85),
+                              fontSize: 12,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(width: 8),
+
+              _StatusChip(text: enrollmentStatus, color: statusColor),
+            ],
+          ),
+
+          const SizedBox(height: 18),
+
+          // GOLD DIVIDER
           Container(
-            width: isTablet ? 58 : 52,
-            height: isTablet ? 58 : 52,
+            height: 1,
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
                 colors: [
-                  AppColor.formPrimaryColor.withOpacity(0.16),
-                  AppColor.formSecondaryColor.withOpacity(0.16),
+                  AppColor.gold.withOpacity(0.0),
+                  AppColor.gold.withOpacity(0.30),
+                  AppColor.gold.withOpacity(0.0),
                 ],
-              ),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: AppColor.formPrimaryColor.withOpacity(0.15),
-              ),
-            ),
-            child: Center(
-              child: Text(
-                initials,
-                style: TextStyle(
-                  color: AppColor.formPrimaryColor,
-                  fontSize: isTablet ? 18 : 16,
-                  fontWeight: FontWeight.w700,
-                ),
               ),
             ),
           ),
 
-          const SizedBox(width: 14),
+          const SizedBox(height: 15),
 
-          // ======================================================
-          // DETAILS
-          // ======================================================
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ==================================================
-                // NAME + STATUS
-                // ==================================================
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: isTablet ? 17 : 16,
-                          fontWeight: FontWeight.w700,
-                          color: AppColor.ghostwhite,
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(width: 8),
-
-                    _StatusChip(text: enrollmentStatus, isActive: isEnrolled),
-                  ],
-                ),
-
-                const SizedBox(height: 7),
-
-                // ==================================================
-                // EMAIL
-                // ==================================================
-                Row(
-                  children: [
-                    Icon(
-                      Icons.email_outlined,
-                      size: 16,
-                      color: AppColor.ghostwhite.withOpacity(0.70),
-                    ),
-
-                    const SizedBox(width: 7),
-
-                    Expanded(
-                      child: Text(
-                        email,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: isTablet ? 14 : 13,
-                          color: AppColor.primaryText,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 12),
-
-                // ==================================================
-                // BOTTOM DETAILS
-                // ==================================================
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _InfoChip(
-                      icon: Icons.calendar_today_outlined,
-                      text: enrollmentDate,
-                    ),
-                    _InfoChip(
-                      icon: Icons.person_add_alt_1_outlined,
-                      text: enrollmentSource,
-                    ),
-                  ],
-                ),
-              ],
-            ),
+          // ENROLLMENT DETAILS
+          Wrap(
+            spacing: 9,
+            runSpacing: 9,
+            children: [
+              _InfoChip(
+                icon: Icons.calendar_month_rounded,
+                label: 'Enrolled',
+                text: enrollmentDate,
+              ),
+              _InfoChip(
+                icon: Icons.person_add_alt_1_rounded,
+                label: 'Source',
+                text: enrollmentSource,
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  // ============================================================
-  // GET INITIALS
-  // ============================================================
+  static String _safeText(String? value, String fallback) {
+    final text = value?.trim();
+    return text != null && text.isNotEmpty ? text : fallback;
+  }
 
-  String _getInitials(String name) {
+  static String _formatDate(dynamic value) {
+    if (value == null) return 'Date unavailable';
+
+    try {
+      final date = DateTime.parse(value.toString()).toLocal();
+      return DateFormat('dd MMM yyyy, hh:mm a').format(date);
+    } catch (_) {
+      return value.toString();
+    }
+  }
+}
+
+// ================================================================
+// PARTICIPANT AVATAR
+// ================================================================
+
+class _ParticipantAvatar extends StatelessWidget {
+  final String name;
+  final double size;
+
+  const _ParticipantAvatar({required this.name, required this.size});
+
+  String _getInitials() {
     final parts =
         name
             .trim()
             .split(RegExp(r'\s+'))
-            .where((element) => element.isNotEmpty)
+            .where((part) => part.isNotEmpty)
             .toList();
 
-    if (parts.isEmpty) {
-      return '?';
-    }
+    if (parts.isEmpty) return '?';
 
     if (parts.length == 1) {
       return parts.first
@@ -621,110 +705,144 @@ class _ParticipantCard extends StatelessWidget {
     return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
   }
 
-  // ============================================================
-  // FORMAT DATE
-  // ============================================================
-
-  String _formatDate(dynamic value) {
-    if (value == null) {
-      return 'Date unavailable';
-    }
-
-    try {
-      final DateTime date = DateTime.parse(value.toString()).toLocal();
-
-      return DateFormat('dd MMM yyyy, hh:mm a').format(date);
-    } catch (_) {
-      return value.toString();
-    }
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF3A3020), Color(0xFF1C1913)],
+        ),
+        shape: BoxShape.circle,
+        border: Border.all(color: AppColor.gold.withOpacity(0.65), width: 1.3),
+        boxShadow: [
+          BoxShadow(color: AppColor.gold.withOpacity(0.07), blurRadius: 12),
+        ],
+      ),
+      child: Center(
+        child: Text(
+          _getInitials(),
+          style: TextStyle(
+            color: AppColor.goldLight,
+            fontSize: size * 0.31,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.5,
+          ),
+        ),
+      ),
+    );
   }
 }
 
-// ============================================================================
+// ================================================================
 // STATUS CHIP
-// ============================================================================
+// ================================================================
 
 class _StatusChip extends StatelessWidget {
   final String text;
-  final bool isActive;
+  final Color color;
 
-  const _StatusChip({required this.text, required this.isActive});
+  const _StatusChip({required this.text, required this.color});
 
   @override
   Widget build(BuildContext context) {
-    final Color color = isActive ? Colors.green : Colors.orange;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.10),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.15)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-
-          const SizedBox(width: 5),
-
-          Text(
-            text,
-            style: TextStyle(
-              color: color,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 105),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.09),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withOpacity(0.28)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
             ),
-          ),
-        ],
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-// ============================================================================
+// ================================================================
 // INFO CHIP
-// ============================================================================
+// ================================================================
 
 class _InfoChip extends StatelessWidget {
   final IconData icon;
+  final String label;
   final String text;
 
-  const _InfoChip({required this.icon, required this.text});
+  const _InfoChip({
+    required this.icon,
+    required this.label,
+    required this.text,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      constraints: const BoxConstraints(maxWidth: double.infinity),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
       decoration: BoxDecoration(
-        // Subtle white overlay on top of the gradient
-        color: Colors.white.withOpacity(0.55),
-
-        borderRadius: BorderRadius.circular(8),
-
-        border: Border.all(color: AppColor.formPrimaryColor.withOpacity(0.13)),
+        color: AppColor.secondaryGlassColor,
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(color: AppColor.gold.withOpacity(0.15)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            icon,
-            size: 14,
-            color: AppColor.formPrimaryColor.withOpacity(0.75),
-          ),
-
-          const SizedBox(width: 5),
-
-          Text(
-            text,
-            style: TextStyle(
-              fontSize: 11,
-              color: AppColor.formPrimaryColor.withOpacity(0.85),
-              fontWeight: FontWeight.w500,
+          Icon(icon, size: 15, color: AppColor.gold),
+          const SizedBox(width: 7),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label.toUpperCase(),
+                  style: TextStyle(
+                    color: AppColor.secondaryText.withOpacity(0.58),
+                    fontSize: 8,
+                    letterSpacing: 0.7,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  text,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColor.goldLight,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    height: 1.3,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -733,116 +851,52 @@ class _InfoChip extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// EMPTY PARTICIPANTS
-// ============================================================================
-
-class _EmptyParticipants extends StatelessWidget {
-  const _EmptyParticipants();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 50),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppColor.formPrimaryColor.withOpacity(0.10),
-            AppColor.formSecondaryColor.withOpacity(0.10),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColor.formPrimaryColor.withOpacity(0.12)),
-      ),
-      child: Column(
-        children: [
-          // ======================================================
-          // EMPTY ICON
-          // ======================================================
-          Container(
-            width: 70,
-            height: 70,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppColor.formPrimaryColor.withOpacity(0.14),
-                  AppColor.formSecondaryColor.withOpacity(0.14),
-                ],
-              ),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.people_outline_rounded,
-              size: 35,
-              color: AppColor.formPrimaryColor,
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // ======================================================
-          // TITLE
-          // ======================================================
-          const Text(
-            'No Participants Yet',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: Colors.black87,
-            ),
-          ),
-
-          const SizedBox(height: 7),
-
-          // ======================================================
-          // DESCRIPTION
-          // ======================================================
-          Text(
-            'There are no enrolled participants for this webinar.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 13,
-              color: AppColor.formPrimaryColor.withOpacity(0.70),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
+// ================================================================
+// SEARCH BAR
+// ================================================================
 
 class _WebinarSearchBar extends StatelessWidget {
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
+  final VoidCallback onClear;
 
-  const _WebinarSearchBar({required this.controller, required this.onChanged});
+  const _WebinarSearchBar({
+    required this.controller,
+    required this.onChanged,
+    required this.onClear,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 52,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
+        color: AppColor.secondaryGlassColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.10)),
+        border: Border.all(color: AppColor.gold.withOpacity(0.30)),
+        boxShadow: [
+          BoxShadow(
+            color: AppColor.shadow.withOpacity(0.25),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: TextField(
         controller: controller,
         onChanged: onChanged,
-        style: const TextStyle(color: Colors.white, fontSize: 14),
-        cursorColor: AppColor.formPrimaryColor,
+        style: const TextStyle(color: AppColor.primaryText, fontSize: 14),
+        cursorColor: AppColor.gold,
         textInputAction: TextInputAction.search,
         decoration: InputDecoration(
-          hintText: 'Search Participants...',
-          hintStyle: const TextStyle(color: Colors.white38, fontSize: 14),
-          prefixIcon: Icon(
+          hintText: 'Search by name or email...',
+          hintStyle: TextStyle(
+            color: AppColor.secondaryText.withOpacity(0.55),
+            fontSize: 13,
+          ),
+          prefixIcon: const Icon(
             Icons.search_rounded,
-            color: AppColor.formPrimaryColor,
-            size: 22,
+            color: AppColor.gold,
+            size: 23,
           ),
           suffixIcon: ValueListenableBuilder<TextEditingValue>(
             valueListenable: controller,
@@ -852,13 +906,11 @@ class _WebinarSearchBar extends StatelessWidget {
               }
 
               return IconButton(
-                onPressed: () {
-                  controller.clear();
-                  onChanged('');
-                },
-                icon: const Icon(
+                tooltip: 'Clear search',
+                onPressed: onClear,
+                icon: Icon(
                   Icons.close_rounded,
-                  color: Colors.white54,
+                  color: AppColor.goldLight.withOpacity(0.85),
                   size: 20,
                 ),
               );
@@ -867,9 +919,115 @@ class _WebinarSearchBar extends StatelessWidget {
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 16,
-            vertical: 15,
+            vertical: 16,
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ================================================================
+// LOADING
+// ================================================================
+
+class _LoadingParticipants extends StatelessWidget {
+  const _LoadingParticipants();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 75),
+      child: Center(
+        child: Column(
+          children: [
+            const SizedBox(
+              width: 32,
+              height: 32,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                valueColor: AlwaysStoppedAnimation<Color>(AppColor.gold),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              'Loading participants...',
+              style: TextStyle(
+                color: AppColor.secondaryText.withOpacity(0.8),
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ================================================================
+// EMPTY PARTICIPANTS
+// ================================================================
+
+class _EmptyParticipants extends StatelessWidget {
+  final bool hasSearch;
+
+  const _EmptyParticipants({required this.hasSearch});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 42),
+      decoration: BoxDecoration(
+        color: AppColor.cardBackground,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColor.gold.withOpacity(0.20)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 76,
+            height: 76,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF332A1C), Color(0xFF171510)],
+              ),
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColor.gold.withOpacity(0.30)),
+            ),
+            child: Icon(
+              hasSearch ? Icons.search_off_rounded : Icons.groups_outlined,
+              size: 35,
+              color: AppColor.gold,
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          Text(
+            hasSearch ? 'No Results Found' : 'No Participants Yet',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppColor.primaryText,
+              fontSize: 19,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+
+          const SizedBox(height: 9),
+
+          Text(
+            hasSearch
+                ? 'Try a different name or email address.'
+                : 'Participants will appear here when their enrollment data is available.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppColor.secondaryText.withOpacity(0.75),
+              fontSize: 13,
+              height: 1.6,
+            ),
+          ),
+        ],
       ),
     );
   }

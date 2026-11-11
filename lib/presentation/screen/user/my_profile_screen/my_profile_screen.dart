@@ -19,13 +19,13 @@ class MyProfileScreen extends StatefulWidget {
   State<MyProfileScreen> createState() => _MyProfileScreenState();
 }
 
-class _MyProfileScreenState extends State<MyProfileScreen> {
+class _MyProfileScreenState extends State<MyProfileScreen>
+    with WidgetsBindingObserver {
   // ============================================================
   // STATE
   // ============================================================
 
   bool _isDialogShowing = false;
-  bool _notificationEnabled = true;
 
   /// Used to force Image.network() to reload after an upload.
   int _profileImageVersion = 0;
@@ -33,7 +33,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
   @override
   void initState() {
     super.initState();
-
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
 
@@ -52,7 +52,7 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
 
     try {
       await profileProvider.getProfilePro();
-
+      await profileProvider.checkNotificationPermission();
       if (!mounted) return;
 
       _handleFailure(profileProvider);
@@ -401,9 +401,22 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
   void _openTermsPrivacy() {
     if (!mounted) return;
 
-    Navigator.pushNamed(context, '/termsprivacy');
+    Navigator.pushNamed(context, '/termsandprivacyscreen');
   }
 
+  @override
+  void dispose() {
+    // TODO: implement dispose
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      context.read<ProfileProvider>().checkNotificationPermission();
+    }
+  }
   // ============================================================
   // BUILD
   // ============================================================
@@ -527,29 +540,34 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                       _MenuCard(
                         children: [
                           // Notifications
-                          _MenuItem(
-                            iconPath: 'assets/svg/profile_svg/notifi_new.svg',
-                            icon: Icons.notifications_none_outlined,
-                            title: 'Notifications',
-                            showArrow: false,
-                            trailing: _SmallSwitch(
-                              value: _notificationEnabled,
-                              onChanged: (value) {
-                                if (!mounted) {
-                                  return;
-                                }
-
-                                setState(() {
-                                  _notificationEnabled = value;
-                                });
-                              },
-                            ),
+                          Consumer<ProfileProvider>(
+                            builder: (context, provider, child) {
+                              return _MenuItem(
+                                iconPath:
+                                    'assets/svg/profile_svg/notifi_new.svg',
+                                icon: Icons.notifications_none_outlined,
+                                title: 'Notifications',
+                                showArrow: false,
+                                trailing: _SmallSwitch(
+                                  value: provider.notificationEnabled,
+                                  onChanged:
+                                      provider.isRequestingPermission
+                                          ? null
+                                          : (value) async {
+                                            await provider
+                                                .handleNotificationToggle(
+                                                  value,
+                                                );
+                                          },
+                                ),
+                              );
+                            },
                           ),
                           const _MenuDivider(),
                           // Help & Support
                           _MenuItem(
                             iconPath:
-                                'assets/svg/profile_svg/help_center_new.svg',
+                                'assets/svg/profile_svg/customer_support_new.svg',
                             fallbackIcon: Icons.headset_mic_outlined,
                             title: 'Help & Support',
                             onTap: _openHelpCenter,
@@ -1169,33 +1187,28 @@ class _MenuItem extends StatelessWidget {
   // ============================================================
 
   Widget _buildIcon() {
-    if (iconPath != null && iconPath!.trim().isNotEmpty) {
-      return SizedBox(
-        width: 24,
-        height: 24,
-        child: SvgPicture.asset(
-          iconPath!,
-          width: 24,
-          height: 24,
-          colorFilter: const ColorFilter.mode(
-            AppColor.goldSoft,
-            BlendMode.srcIn,
-          ),
-          placeholderBuilder: (context) {
-            return Icon(
-              fallbackIcon ?? Icons.settings_outlined,
-              size: 24,
-              color: AppColor.goldSoft,
-            );
-          },
-        ),
-      );
+    final IconData defaultIcon =
+        icon ?? fallbackIcon ?? Icons.settings_outlined;
+
+    if (iconPath == null || iconPath!.trim().isEmpty) {
+      return Icon(defaultIcon, size: 24, color: AppColor.goldSoft);
     }
 
-    return Icon(
-      icon ?? fallbackIcon ?? Icons.settings_outlined,
-      size: 24,
-      color: AppColor.goldSoft,
+    return SizedBox(
+      width: 24,
+      height: 24,
+      child: SvgPicture.asset(
+        iconPath!,
+        width: 24,
+        height: 24,
+        colorFilter: const ColorFilter.mode(AppColor.goldSoft, BlendMode.srcIn),
+        errorBuilder: (context, error, stackTrace) {
+          debugPrint('Failed to load SVG: $iconPath');
+          debugPrint('SVG error: $error');
+
+          return Icon(defaultIcon, size: 24, color: AppColor.goldSoft);
+        },
+      ),
     );
   }
 }
@@ -1226,7 +1239,7 @@ class _MenuDivider extends StatelessWidget {
 
 class _SmallSwitch extends StatelessWidget {
   final bool value;
-  final ValueChanged<bool> onChanged;
+  final ValueChanged<bool>? onChanged;
 
   const _SmallSwitch({required this.value, required this.onChanged});
 

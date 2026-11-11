@@ -10,7 +10,7 @@
         android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-        
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />    
     <application
         android:label="WWITPL"
         android:name="${applicationName}"

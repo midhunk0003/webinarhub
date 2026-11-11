@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:lms/animation/webinar_stager_animation.dart';
 import 'package:lms/core/api_end_point.dart';
 import 'package:lms/core/colors.dart';
 import 'package:lms/core/failure.dart';
@@ -12,6 +13,7 @@ import 'package:lms/presentation/widgets/common_custome_button_widget.dart';
 import 'package:lms/presentation/widgets/diloges/app_dialog_helper.dart';
 import 'package:lms/presentation/widgets/network_retry_widget.dart';
 import 'package:lms/presentation/widgets/reusablebackground/reusablebackground.dart';
+import 'package:lottie/lottie.dart';
 import 'package:provider/provider.dart';
 
 class TrainerWebinarScreen extends StatefulWidget {
@@ -23,6 +25,7 @@ class TrainerWebinarScreen extends StatefulWidget {
 
 class _TrainerWebinarScreenState extends State<TrainerWebinarScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   Timer? _searchDebounce;
   String _selectedFilter = 'All';
   bool _isDialogShowing = false;
@@ -37,7 +40,7 @@ class _TrainerWebinarScreenState extends State<TrainerWebinarScreen> {
   @override
   void initState() {
     super.initState();
-
+    _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initialData();
     });
@@ -55,6 +58,23 @@ class _TrainerWebinarScreenState extends State<TrainerWebinarScreen> {
     await provider.getAllWebinarPro(status, '');
 
     if (!mounted) return;
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+
+    // Load more when 300 pixels remain
+    if (_scrollController.position.extentAfter < 300) {
+      final provider = context.read<TrainerAllWebinarProvider>();
+
+      if (!provider.isLoading && !provider.isLoadingMore && provider.hasMore) {
+        provider.getAllWebinarPro(
+          _getStatus(_selectedFilter),
+          _searchController.text.trim(),
+          loadMore: true,
+        );
+      }
+    }
   }
 
   // ============================================================
@@ -183,6 +203,7 @@ class _TrainerWebinarScreenState extends State<TrainerWebinarScreen> {
             onRefresh: _initialData,
             color: AppColor.gold,
             child: SingleChildScrollView(
+              controller: _scrollController,
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.only(bottom: 100),
               child: ConstrainedBox(
@@ -366,8 +387,9 @@ class WebinarList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final data = trainerAllWebinarProvider.trainerFullListWebinarModel?.data;
+    final items = trainerAllWebinarProvider.webinarItems;
 
-    final items = data?.items ?? [];
+    // final items = data?.items ?? [];
 
     if (items.isEmpty) {
       return const _WebinarEmptyState();
@@ -377,24 +399,45 @@ class WebinarList extends StatelessWidget {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       padding: EdgeInsets.zero,
-      itemCount: items.length,
+      itemCount:
+          items.length + (trainerAllWebinarProvider.isLoadingMore ? 1 : 0),
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
+        // Bottom loading indicator
+        if (index >= items.length) {
+          return Padding(
+            padding: EdgeInsets.symmetric(vertical: 20),
+            child: Center(
+              child: CircularProgressIndicator(color: AppColor.gold),
+            ),
+          );
+        }
         final webinar = items[index];
 
-        return WebinarTile(
-          key: ValueKey(webinar.id),
-          title: _safeString(webinar.title),
-          status:
-              _safeString(webinar.statusName).isNotEmpty
-                  ? _safeString(webinar.statusName)
-                  : _getStatusText(webinar.status),
-          students: _safeString(webinar.enrolledParticipantCount),
-          startDateTime: _safeString(webinar.startDateTime),
-          recentWebinarId: _safeString(webinar.id),
-          isPaid: _safeString(webinar.isPaid),
-          price: _formatPrice(webinar.price, _safeString(null), webinar.isPaid),
-          imageUrl: _safeString(webinar.thumbnailUrl),
+        return WebinarStaggerAnimation(
+          index: index,
+          child: Column(
+            children: [
+              WebinarTile(
+                key: ValueKey(webinar.id),
+                title: _safeString(webinar.title),
+                status:
+                    _safeString(webinar.statusName).isNotEmpty
+                        ? _safeString(webinar.statusName)
+                        : _getStatusText(webinar.status),
+                students: _safeString(webinar.enrolledParticipantCount),
+                startDateTime: _safeString(webinar.startDateTime),
+                recentWebinarId: _safeString(webinar.id),
+                isPaid: _safeString(webinar.isPaid),
+                price: _formatPrice(
+                  webinar.price,
+                  _safeString(null),
+                  webinar.isPaid,
+                ),
+                imageUrl: _safeString(webinar.thumbnailUrl),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -734,7 +777,7 @@ class WebinarTile extends StatelessWidget {
   // ==========================================================================
   // FALLBACK IMAGE
   // ==========================================================================
-
+  // Premium animated fallback image.
   Widget _buildFallbackImage() {
     return Container(
       width: double.infinity,
@@ -744,17 +787,114 @@ class WebinarTile extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            AppColor.gold.withOpacity(.20),
-            AppColor.goldDark.withOpacity(.20),
+            AppColor.gold.withOpacity(0.22),
+            const Color(0xFF171717),
+            AppColor.goldDark.withOpacity(0.16),
           ],
         ),
       ),
-      child: const Center(
-        child: Icon(
-          Icons.video_collection_outlined,
-          size: 42,
-          color: AppColor.gold,
-        ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Background glow.
+          Container(
+            width: 170,
+            height: 170,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [
+                  AppColor.gold.withOpacity(0.18),
+                  AppColor.gold.withOpacity(0.02),
+                  Colors.transparent,
+                ],
+              ),
+            ),
+          ),
+
+          // Animated outer ring.
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.85, end: 1.15),
+            duration: const Duration(milliseconds: 1800),
+            curve: Curves.easeInOut,
+            builder: (context, scale, child) {
+              return Transform.scale(
+                scale: scale,
+                child: Container(
+                  width: 112,
+                  height: 112,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: AppColor.gold.withOpacity(0.22),
+                      width: 1.2,
+                    ),
+                  ),
+                  child: child,
+                ),
+              );
+            },
+            onEnd: () {},
+            child: const SizedBox.expand(),
+          ),
+
+          // Glass-style icon container.
+          Container(
+            width: 88,
+            height: 88,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withOpacity(0.055),
+              border: Border.all(
+                color: AppColor.gold.withOpacity(0.45),
+                width: 1.3,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColor.gold.withOpacity(0.12),
+                  blurRadius: 28,
+                  spreadRadius: 3,
+                ),
+              ],
+            ),
+            child: Center(
+              child: Lottie.asset(
+                'assets/animations/video_placeholder.json',
+                width: 62,
+                height: 62,
+                fit: BoxFit.contain,
+                repeat: true,
+                errorBuilder: (context, error, stackTrace) {
+                  return Icon(
+                    Icons.play_circle_outline_rounded,
+                    size: 48,
+                    color: AppColor.gold,
+                  );
+                },
+              ),
+            ),
+          ),
+
+          // Small decorative sparkles.
+          Positioned(
+            top: 20,
+            right: 24,
+            child: Icon(
+              Icons.auto_awesome,
+              size: 17,
+              color: AppColor.gold.withOpacity(0.65),
+            ),
+          ),
+          Positioned(
+            bottom: 22,
+            left: 25,
+            child: Icon(
+              Icons.circle,
+              size: 7,
+              color: AppColor.gold.withOpacity(0.7),
+            ),
+          ),
+        ],
       ),
     );
   }

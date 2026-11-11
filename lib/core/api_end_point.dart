@@ -1,11 +1,11 @@
 class ApiEndPoint {
   static const String baseUrl = "http://57.128.119.77:8080/api/";
   // static const String baseUrl =
-  //     "https://e84e-2405-201-f007-67-1c36-254b-1494-9998.ngrok-free.app/api/";
+  //     "https://c888-2405-201-e018-b0-e101-66ae-397e-63e9.ngrok-free.app/api/";
 
   static const String serverUrl = 'http://57.128.119.77:8080/';
   // static const String serverUrl =
-  //     'https://e84e-2405-201-f007-67-1c36-254b-1494-9998.ngrok-free.app';
+  //     'https://c888-2405-201-e018-b0-e101-66ae-397e-63e9.ngrok-free.app';
 
   // login and register
   static const String loginEndPoint = "Auth/login";
@@ -85,4 +85,10 @@ class ApiEndPoint {
 
   // payment history
   static const String paymentHistoryEndPoint = "Transactions";
+
+  static const String helpCenterEndPoint = "help-center";
+
+  // monthly summary
+  static const String monthlyTransactionSummaryEndPoint =
+      "Transactions/monthly-summary";
 }

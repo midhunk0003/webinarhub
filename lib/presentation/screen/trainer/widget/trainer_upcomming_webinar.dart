@@ -5,6 +5,7 @@ import 'package:lms/core/api_end_point.dart';
 import 'package:lms/core/colors.dart';
 import 'package:lms/presentation/provider/trainer_provider/trainer_dashboard_provider.dart';
 import 'package:lms/presentation/widgets/common_custome_button_widget.dart';
+import 'package:lms/presentation/widgets/common_empty_state_home.dart';
 import 'package:lms/presentation/widgets/formatWebinarDate.dart';
 
 class UpcomingWebinarCard extends StatefulWidget {
@@ -51,7 +52,10 @@ class _UpcomingWebinarCardState extends State<UpcomingWebinarCard>
             ?.upcomingWebinar;
 
     if (webinar == null) {
-      return const _TrainerWebinarEmptyState();
+      return WebinarEmptyState(
+        title: "No Upcoming Webinars",
+        subTitle: 'Your scheduled webinars will appear here',
+      );
     }
 
     return LayoutBuilder(
@@ -414,43 +418,6 @@ class _UpcomingWebinarCardState extends State<UpcomingWebinarCard>
           ),
         ),
       ],
-    );
-  }
-}
-
-// Empty state.
-class _TrainerWebinarEmptyState extends StatelessWidget {
-  const _TrainerWebinarEmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 45),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.035),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
-      ),
-      child: const Column(
-        children: [
-          Icon(
-            Icons.video_camera_front_outlined,
-            size: 48,
-            color: Colors.white30,
-          ),
-          SizedBox(height: 14),
-          Text(
-            'No Upcoming Webinars Found',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

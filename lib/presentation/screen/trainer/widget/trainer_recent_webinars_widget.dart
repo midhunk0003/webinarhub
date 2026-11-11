@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import 'package:lms/core/api_end_point.dart';
 import 'package:lms/core/colors.dart';
 import 'package:lms/presentation/provider/trainer_provider/trainer_dashboard_provider.dart';
+import 'package:lms/presentation/screen/trainer/widget/trainer_upcomming_webinar.dart';
+import 'package:lms/presentation/widgets/common_empty_state_home.dart';
 
 // ============================================================================
 // TRAINER WEBINAR LIST
@@ -27,7 +29,10 @@ class TrainerRecentWebinarsWidget extends StatelessWidget {
         [];
 
     if (webinars.isEmpty) {
-      return const SizedBox.shrink();
+      return WebinarEmptyState(
+        title: 'No Recent Webinars',
+        subTitle: 'New webinars will appear here when available.',
+      );
     }
 
     return SizedBox(

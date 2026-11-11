@@ -119,6 +119,8 @@ class _TrainerHomeScreenState extends State<TrainerHomeScreen> {
               }
 
               return RefreshIndicator(
+                backgroundColor: AppColor.background,
+                color: AppColor.gold,
                 onRefresh: () async {
                   await _initialData();
                 },
@@ -179,7 +181,6 @@ class _TrainerHomeScreenState extends State<TrainerHomeScreen> {
                                   true,
                                   widget.onViewAll,
                                 ),
-
                                 const SizedBox(height: 15),
                                 TrainerRecentWebinarsWidget(
                                   trainerDashboardProvider: trainerDashProvider,

@@ -19,17 +19,68 @@ class TrainerNotificationScreen extends StatefulWidget {
 }
 
 class _TrainerNotificationScreenState extends State<TrainerNotificationScreen> {
-  int _selectedTab = 0;
+  final ScrollController _scrollController = ScrollController();
 
+  int _selectedTab = 0;
+  bool _isLoadingMore = false;
   bool _isDialogShowing = false;
 
   @override
   void initState() {
     super.initState();
-
+    _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadNotifications();
     });
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients || !mounted) return;
+
+    if (_scrollController.position.extentAfter < 250) {
+      _loadMoreNotifications();
+    }
+  }
+
+  Future<void> _loadMoreNotifications() async {
+    if (!mounted || _isLoadingMore) return;
+
+    final provider = context.read<TrainerAllWebinarProvider>();
+
+    if (!provider.hasMoreNotifications ||
+        provider.isLoadingNotifications ||
+        provider.isLoadingMoreNotifications) {
+      return;
+    }
+    String? isRead;
+
+    switch (_selectedTab) {
+      case 0:
+        // All
+        isRead = null;
+        break;
+
+      case 1:
+        // Unread
+        isRead = 'false';
+        break;
+
+      case 2:
+        // Read
+        isRead = 'true';
+        break;
+    }
+    print('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa :::${isRead}');
+
+    try {
+      await provider.getAllNotification(isRead, loadMore: true);
+
+      if (!mounted) return;
+
+      if (provider.failure != null && provider.failure is! NetworkFailure) {
+        await _handleFailure(provider);
+      }
+    } finally {}
   }
 
   // ============================================================
@@ -111,6 +162,7 @@ class _TrainerNotificationScreenState extends State<TrainerNotificationScreen> {
   // ============================================================
 
   void _onTabChanged(int index) {
+    print(index);
     if (_selectedTab == index) return;
 
     setState(() {
@@ -131,6 +183,12 @@ class _TrainerNotificationScreenState extends State<TrainerNotificationScreen> {
   // ============================================================
   // BUILD
   // ============================================================
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -146,6 +204,7 @@ class _TrainerNotificationScreenState extends State<TrainerNotificationScreen> {
             color: AppColor.gold,
 
             child: SingleChildScrollView(
+              controller: _scrollController, // Add this line
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.only(bottom: 100),
               child: ConstrainedBox(
@@ -224,7 +283,7 @@ class _TrainerNotificationScreenState extends State<TrainerNotificationScreen> {
                         // LOADING
                         // ------------------------------------------
 
-                        if (provider.isLoading) {
+                        if (provider.isLoadingNotifications) {
                           return const Padding(
                             padding: EdgeInsets.symmetric(vertical: 70),
                             child: Center(
@@ -240,7 +299,7 @@ class _TrainerNotificationScreenState extends State<TrainerNotificationScreen> {
                         // ------------------------------------------
 
                         final List<NotificationItem> notifications =
-                            provider.notificationModel?.data?.items ?? [];
+                            provider.notificationItems ?? [];
 
                         // ------------------------------------------
                         // EMPTY
@@ -259,31 +318,53 @@ class _TrainerNotificationScreenState extends State<TrainerNotificationScreen> {
                             horizontal: isTablet ? 8 : 0,
                           ),
                           child: Column(
-                            children: List.generate(notifications.length, (
-                              index,
-                            ) {
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 12),
-                                child: _NotificationCard(
-                                  notification: notifications[index],
-                                  isTablet: isTablet,
-                                  onTap: () async {
-                                    if (notifications[index].isRead == 'true') {
-                                      print('is read');
-                                      return;
-                                    }
+                            children: [
+                              ...List.generate(notifications.length, (index) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: _NotificationCard(
+                                    notification: notifications[index],
+                                    isTablet: isTablet,
+                                    onTap: () async {
+                                      if (notifications[index].isRead ==
+                                          'true') {
+                                        print('is read');
+                                        return;
+                                      }
 
-                                    await provider.markAsReadNotification(
-                                      notifications[index].id.toString(),
-                                    );
-                                    await _loadNotifications();
-                                    provider.getNotificationCountPro();
-                                    provider.clearFailure();
-                                    if (!mounted) return;
-                                  },
+                                      await provider.markAsReadNotification(
+                                        notifications[index].id.toString(),
+                                      );
+                                      await _loadNotifications();
+                                      provider.getNotificationCountPro();
+                                      provider.clearFailure();
+                                      if (!mounted) return;
+                                    },
+                                  ),
+                                );
+                              }),
+
+                              // Bottom pagination loader
+                              if (provider.isLoadingMoreNotifications)
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 20),
+                                  child: Center(
+                                    child: SizedBox(
+                                      height: 28,
+                                      width: 28,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 3,
+                                        color: AppColor.gold,
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                              );
-                            }),
+
+                              // Optional: show when no more pages exist
+                              if (!provider.hasMoreNotifications &&
+                                  notifications.isNotEmpty)
+                                const SizedBox(height: 20),
+                            ],
                           ),
                         );
                       },

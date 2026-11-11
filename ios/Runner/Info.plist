@@ -28,6 +28,14 @@
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
+	<key>NSCameraUsageDescription</key>
+    <string>Camera access is required for Zoom meetings.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Microphone access is required for Zoom meetings.</string>
+    <key>NSBluetoothPeripheralUsageDescription</key>
+    <string>Bluetooth access is used for audio devices.</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>Photo access is used when sharing photos in meetings.</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

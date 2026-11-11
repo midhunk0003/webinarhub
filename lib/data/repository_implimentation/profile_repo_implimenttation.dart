@@ -5,6 +5,7 @@ import 'package:lms/core/api_end_point.dart';
 import 'package:lms/core/failure.dart';
 import 'package:lms/core/success.dart';
 import 'package:lms/data/model/get_contact_model/get_contact_model.dart';
+import 'package:lms/data/model/help_and_support_model/help_and_support_model.dart';
 import 'package:lms/data/model/profile_model/profile_model.dart';
 import 'package:lms/data/network/api_client.dart';
 import 'package:lms/domain/repository/profile_repository.dart';
@@ -153,6 +154,51 @@ class ProfileRepoImplimenttation implements ProfileRepository {
         },
       );
     } catch (e) {
+      return Left(AuthFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, HelpAndSupportModel>> getHelpAndSupport(
+    String? search,
+    String? categoryId,
+  ) async {
+    try {
+      final queryParameters = <String, String>{};
+
+      // Add search only when it has a value
+      if (search != null && search.isNotEmpty) {
+        queryParameters['search'] = search;
+      }
+
+      // Add CategoryId only when it has a value
+      if (categoryId != null && categoryId.isNotEmpty) {
+        queryParameters['categoryId'] = categoryId;
+      }
+
+      final uri = Uri.parse(
+        '${ApiEndPoint.baseUrl}${ApiEndPoint.helpCenterEndPoint}',
+      ).replace(
+        queryParameters: queryParameters.isEmpty ? null : queryParameters,
+      );
+
+      final result = await apiClient.get(uri.toString());
+
+      log('API get helpAndSupportData Data: $result');
+
+      return result.fold(
+        (failure) {
+          log('Failure inside repository: ${failure.message}');
+          return Left(failure);
+        },
+        (data) {
+          final helpAndSupportData = HelpAndSupportModel.fromJson(data);
+
+          return Right(helpAndSupportData);
+        },
+      );
+    } catch (e) {
+      log('getHelpAndSupport Exception: $e');
       return Left(AuthFailure(e.toString()));
     }
   }

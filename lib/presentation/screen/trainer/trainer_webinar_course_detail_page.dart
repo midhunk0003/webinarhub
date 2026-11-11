@@ -261,8 +261,9 @@ class _TrainerWebinarCourseDetailPageState
                               // Rating
                               RatingAndStudentEnrollWidget(
                                 isTablet: isTablet,
-                                stundEnrolled:
-                                    '${course?.enrolledParticipantCount ?? ''}',
+                                // stundEnrolled:
+                                //     '${course?.enrolledParticipantCount ?? ''}',
+                                maxParticipants: course.maxParticipants ?? '0',
                                 onTap: () {
                                   if (!permissionProvider.canViewParticipents) {
                                     if (!permissionProvider
@@ -676,23 +677,29 @@ class _TrainerWebinarCourseDetailPageState
                                           children: [
                                             _UploadContentCard(
                                               isTablet: isTablet,
+                                              // Dynamic icon based on file extension
                                               icon:
                                                   selectedFile != null
-                                                      ? Icons
-                                                          .description_outlined
+                                                      ? trainerCourseProvider
+                                                          .selectedFileIcon
                                                       : Icons
                                                           .picture_as_pdf_outlined,
+                                              // Dynamic title based on file extension
                                               title:
                                                   selectedFile != null
-                                                      ? 'PDF Selected'
-                                                      : 'Upload PDF',
+                                                      ? '${trainerCourseProvider.extensionLabel(trainerCourseProvider.selectedFileExtension)} Selected'
+                                                      : 'Upload PDF | Image',
+                                              // Show selected filename
                                               subtitle:
                                                   selectedFile != null
-                                                      ? selectedFile.name
+                                                      ? trainerCourseProvider
+                                                          .selectedFileName
                                                       : 'Add course PDF resource',
+                                              // Dynamic color based on file extension
                                               iconColor:
                                                   selectedFile != null
-                                                      ? Colors.green
+                                                      ? trainerCourseProvider
+                                                          .selectedFileColor
                                                       : Colors.redAccent,
                                               onTap:
                                                   trainerCourseProvider
@@ -721,127 +728,101 @@ class _TrainerWebinarCourseDetailPageState
                                             // Show upload button after selecting file
                                             if (selectedFile != null) ...[
                                               const SizedBox(height: 12),
-
-                                              SizedBox(
-                                                width: double.infinity,
-                                                child: ElevatedButton.icon(
-                                                  onPressed:
-                                                      trainerCourseProvider
-                                                              .isUploadingResource
-                                                          ? null
-                                                          : () async {
-                                                            final provider =
-                                                                trainerCourseProvider;
-
-                                                            final filePath =
-                                                                selectedFile
-                                                                    .path;
-
-                                                            if (filePath ==
-                                                                    null ||
-                                                                filePath
-                                                                    .isEmpty) {
-                                                              return;
-                                                            }
-
-                                                            await provider
-                                                                .uploadResourcePro(
-                                                                  courseId:
-                                                                      course.id
-                                                                          .toString(),
-                                                                  file:
-                                                                      filePath,
-                                                                );
-
-                                                            if (!context
-                                                                .mounted)
-                                                              return;
-
-                                                            // ================= SUCCESS =================
-
-                                                            print(
-                                                              'ssssssssssssssssssssssssss : ${provider.success?.message}',
-                                                            );
-                                                            if (provider
-                                                                    .success !=
-                                                                null) {
-                                                              AppDialogHelper.showSuccessDialog(
-                                                                context:
-                                                                    context,
-                                                                message:
-                                                                    provider
-                                                                        .success!
-                                                                        .message ??
-                                                                    'Resource uploaded successfully',
-                                                                provider:
-                                                                    provider,
-                                                                onTap: () {
-                                                                  // provider.clearFailure();
-                                                                  Navigator.pop(
-                                                                    context,
-                                                                  );
-                                                                },
-                                                              );
-                                                              // Refresh resource list after successful upload
-                                                              await provider
-                                                                  .getCourseResourceListPro(
-                                                                    course.id
-                                                                        .toString(),
-                                                                  );
-                                                              // getCourseResourceListPro clears success,
-                                                              // so set it again after refreshing.
-                                                              // Clear selected file
-                                                              provider
-                                                                  .clearSelectedFile();
-                                                            }
-                                                            // ================= FAILURE =================
-                                                            else if (provider
-                                                                    .failure !=
-                                                                null) {
-                                                              AppDialogHelper.showFailureDialog(
-                                                                context:
-                                                                    context,
-                                                                failure:
-                                                                    provider
-                                                                        .failure,
-                                                                provider:
-                                                                    provider,
-                                                                onTap: () {
-                                                                  provider
-                                                                      .clearFailure();
-                                                                  Navigator.pop(
-                                                                    context,
-                                                                  );
-                                                                },
-                                                              );
-                                                            }
-                                                          },
-                                                  icon:
-                                                      trainerCourseProvider
-                                                              .isUploadingResource
-                                                          ? const SizedBox(
-                                                            width: 18,
-                                                            height: 18,
-                                                            child:
-                                                                CircularProgressIndicator(
-                                                                  strokeWidth:
-                                                                      2,
-                                                                  color:
-                                                                      Colors
-                                                                          .white,
-                                                                ),
-                                                          )
-                                                          : const Icon(
-                                                            Icons
-                                                                .cloud_upload_outlined,
-                                                          ),
-                                                  label: Text(
+                                              CommonCustomeButtonWidget(
+                                                isTablet: isTablet,
+                                                text:
                                                     trainerCourseProvider
                                                             .isUploadingResource
                                                         ? 'Uploading...'
-                                                        : 'Upload File',
-                                                  ),
-                                                ),
+                                                        : 'Submit',
+                                                icon:
+                                                    Icons.cloud_upload_outlined,
+                                                onTap:
+                                                    trainerCourseProvider
+                                                            .isUploadingResource
+                                                        ? null
+                                                        : () async {
+                                                          final provider =
+                                                              trainerCourseProvider;
+
+                                                          final filePath =
+                                                              selectedFile.path;
+
+                                                          if (filePath ==
+                                                                  null ||
+                                                              filePath
+                                                                  .isEmpty) {
+                                                            return;
+                                                          }
+
+                                                          await provider
+                                                              .uploadResourcePro(
+                                                                courseId:
+                                                                    course.id
+                                                                        .toString(),
+                                                                file: filePath,
+                                                              );
+
+                                                          if (!context.mounted)
+                                                            return;
+
+                                                          // ================= SUCCESS =================
+
+                                                          print(
+                                                            'ssssssssssssssssssssssssss : ${provider.success?.message}',
+                                                          );
+                                                          if (provider
+                                                                  .success !=
+                                                              null) {
+                                                            AppDialogHelper.showSuccessDialog(
+                                                              context: context,
+                                                              message:
+                                                                  provider
+                                                                      .success!
+                                                                      .message ??
+                                                                  'Resource uploaded successfully',
+                                                              provider:
+                                                                  provider,
+                                                              onTap: () {
+                                                                // provider.clearFailure();
+                                                                Navigator.pop(
+                                                                  context,
+                                                                );
+                                                              },
+                                                            );
+                                                            // Refresh resource list after successful upload
+                                                            await provider
+                                                                .getCourseResourceListPro(
+                                                                  course.id
+                                                                      .toString(),
+                                                                );
+                                                            // getCourseResourceListPro clears success,
+                                                            // so set it again after refreshing.
+                                                            // Clear selected file
+                                                            provider
+                                                                .clearSelectedFile();
+                                                          }
+                                                          // ================= FAILURE =================
+                                                          else if (provider
+                                                                  .failure !=
+                                                              null) {
+                                                            AppDialogHelper.showFailureDialog(
+                                                              context: context,
+                                                              failure:
+                                                                  provider
+                                                                      .failure,
+                                                              provider:
+                                                                  provider,
+                                                              onTap: () {
+                                                                provider
+                                                                    .clearFailure();
+                                                                Navigator.pop(
+                                                                  context,
+                                                                );
+                                                              },
+                                                            );
+                                                          }
+                                                        },
                                               ),
                                             ],
                                           ],
@@ -1105,6 +1086,13 @@ class _TrainerWebinarCourseDetailPageState
                                                       ?.meetingUrl ??
                                                   '';
 
+                                              final userNameApi =
+                                                  userCourseProvider
+                                                      .userJoinWebinarModel
+                                                      ?.data
+                                                      ?.userName ??
+                                                  '';
+
                                               final meetingIdApi =
                                                   userCourseProvider
                                                       .userJoinWebinarModel
@@ -1151,7 +1139,7 @@ class _TrainerWebinarCourseDetailPageState
                                               //     "https://app.zoom.us/wc/84228660846/start?fromPWA=1&pwd=3KNfc1lTxRv8XHK6rxuHSyvGiRH0Xa.1";
 
                                               const zoomUrl =
-                                                  "https://us05web.zoom.us/j/85663818907?pwd=E2qEiJtJlZWojWsviYh7s5M7XCHF1h.1";
+                                                  "https://zoom.us/j/95178322697?pwd=ydpyvnyR5kbIf6sxnWeNKLEtwpK3I7.1";
                                               final zoomData = parseZoomUrl(
                                                 zoomUrl,
                                               );
@@ -1199,9 +1187,9 @@ class _TrainerWebinarCourseDetailPageState
 
                                               final jwt = generateZoomJwt(
                                                 clientId:
-                                                    "ThCVsAiWRSag9kEVQbzZiw",
+                                                    "ZZNZFQB3QWwJELuqS3L_Q",
                                                 clientSecret:
-                                                    "eE47oI40X2hU8vIjs8iY1hWvjaCF9Y39",
+                                                    "SWWlGF3Ng6rIPWjr7l8yMG0L3stpfPoQ",
                                                 meetingNumber:
                                                     '${zoomData.meetingNumber}',
                                               );
@@ -1214,7 +1202,9 @@ class _TrainerWebinarCourseDetailPageState
                                                 "Zoom Password: ${zoomData.password}",
                                               );
 
-                                              debugPrint("jwt print: $jwt");
+                                              debugPrint(
+                                                "jwt print.......: $jwt",
+                                              );
 
                                               // =====================================================
                                               // SEND TO ANDROID
@@ -1230,7 +1220,7 @@ class _TrainerWebinarCourseDetailPageState
                                                             '${meetingIdApi}',
                                                         "meetingPassword":
                                                             '${meetingPassApi}',
-                                                        "userName": userName,
+                                                        "userName": userNameApi,
                                                         "jwt": meetingJwtApi,
                                                       },
                                                     );

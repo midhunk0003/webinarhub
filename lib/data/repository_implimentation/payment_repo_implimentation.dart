@@ -5,6 +5,7 @@ import 'package:lms/core/api_end_point.dart';
 import 'package:lms/core/failure.dart';
 import 'package:lms/data/model/available_payment_gate_ways/available_payment_gate_ways_model.dart';
 import 'package:lms/data/model/create_payment_order_model/create_payment_order_model.dart';
+import 'package:lms/data/model/monthly_transation_summery_model/monthly_transation_summery_model.dart';
 import 'package:lms/data/model/payment_history_model/payment_history_model.dart';
 import 'package:lms/data/model/payment_verify_model/payment_verify_model.dart';
 import 'package:lms/data/network/api_client.dart';
@@ -117,12 +118,17 @@ class PaymentRepoImplimentation implements PaymentRepository {
     int? paymentMethod,
     DateTime? fromDate,
     DateTime? toDate,
+    int page = 1,
+    int pageSize = 7,
   }) async {
     try {
       if (fromDate != null && toDate != null && fromDate.isAfter(toDate)) {
         return Left(AuthFailure('From date cannot be after To date.'));
       }
-      final query = <String, String>{};
+      final query = <String, String>{
+        'Page': page.toString(),
+        'PageSize': pageSize.toString(),
+      };
       if (search?.trim().isNotEmpty == true) query['Search'] = search!.trim();
       if (status != null) query['Status'] = '$status';
       if (paymentMethod != null) query['PaymentMethod'] = '$paymentMethod';
@@ -134,6 +140,8 @@ class PaymentRepoImplimentation implements PaymentRepository {
       final uri = Uri.parse(endpoint).replace(queryParameters: query);
       log('Payment history request: $uri');
       final result = await apiClient.get(uri.toString());
+      log('Payment history result: $result');
+
       return result.fold((f) => Left(f), (data) {
         if (data is! Map)
           return Left(ServerFailure('Invalid payment history response.'));
@@ -149,5 +157,38 @@ class PaymentRepoImplimentation implements PaymentRepository {
 
   String _formatDate(DateTime date) {
     return date.toUtc().toIso8601String();
+  }
+
+  @override
+  Future<Either<Failure, MonthlyTransationSummeryModel>>
+  getMonthlyTransactionSummary() async {
+    try {
+      final endpoint =
+          '${ApiEndPoint.baseUrl}${ApiEndPoint.monthlyTransactionSummaryEndPoint}';
+
+      final result = await apiClient.get(endpoint);
+
+      log('Monthly transaction summary result: $result');
+
+      return result.fold((failure) => Left(failure), (data) {
+        if (data is! Map) {
+          return Left(ServerFailure('Invalid monthly summary response.'));
+        }
+
+        return Right(
+          MonthlyTransationSummeryModel.fromJson(
+            Map<String, dynamic>.from(data),
+          ),
+        );
+      });
+    } catch (e, stackTrace) {
+      log(
+        'getMonthlyTransactionSummary failed',
+        error: e,
+        stackTrace: stackTrace,
+      );
+
+      return Left(ServerFailure('Unable to load monthly transaction summary.'));
+    }
   }
 }

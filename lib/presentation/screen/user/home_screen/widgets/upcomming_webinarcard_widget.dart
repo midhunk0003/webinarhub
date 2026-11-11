@@ -7,7 +7,9 @@ import 'package:lms/core/colors.dart';
 import 'package:lms/data/model/user_dashboard_upcomming_and_recent_model/user_dashboard_upcomming_and_recent_model.dart';
 import 'package:lms/presentation/provider/user_provider/user_dashboard_provider.dart';
 import 'package:lms/presentation/widgets/common_custome_button_widget.dart';
+import 'package:lms/presentation/widgets/common_empty_state_home.dart';
 import 'package:lms/presentation/widgets/formatWebinarDate.dart';
+import 'package:lottie/lottie.dart';
 
 class UpcomingWebinarCard extends StatefulWidget {
   final UserDashboardProvider userDashboardProvider;
@@ -60,7 +62,10 @@ class _UpcomingWebinarCardState extends State<UpcomingWebinarCard>
             ?.upcomingWebinar;
 
     if (upcomingWebinar == null) {
-      return const _WebinarEmptyState();
+      return const WebinarEmptyState(
+        title: 'No Upcoming Webinars',
+        subTitle: 'New webinars will appear here when available.',
+      );
     }
 
     return LayoutBuilder(
@@ -930,39 +935,3 @@ class _BorderShinePainter extends CustomPainter {
 // ============================================================================
 // EMPTY STATE
 // ============================================================================
-
-class _WebinarEmptyState extends StatelessWidget {
-  const _WebinarEmptyState();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 55),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.035),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.07)),
-      ),
-      child: const Column(
-        children: [
-          Icon(
-            Icons.video_camera_front_outlined,
-            size: 52,
-            color: Colors.white30,
-          ),
-          SizedBox(height: 16),
-          Text(
-            'No Upcoming webinars found',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              fontFamily: 'Urbanist',
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}

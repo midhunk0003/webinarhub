@@ -336,6 +336,135 @@ class TrainerCourseProvider extends ChangeNotifier {
     }
   }
 
+  // Get selected file extension
+  String get selectedFileExtension {
+    return _selectedFile?.extension?.toLowerCase() ?? '';
+  }
+
+  // Get file name
+  String get selectedFileName {
+    return _selectedFile?.name ?? 'Upload File';
+  }
+
+  String extensionLabel(String extension) {
+    switch (extension.toLowerCase()) {
+      case 'pdf':
+        return 'PDF';
+
+      case 'doc':
+      case 'docx':
+        return 'Word Document';
+
+      case 'ppt':
+      case 'pptx':
+        return 'Presentation';
+
+      case 'xls':
+      case 'xlsx':
+        return 'Excel File';
+
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+      case 'webp':
+      case 'svg':
+        return 'Image';
+
+      case 'mp4':
+      case 'mov':
+      case 'avi':
+      case 'mkv':
+      case 'webm':
+        return 'Video';
+
+      default:
+        return 'File';
+    }
+  }
+
+  // Get file icon based on extension
+  IconData get selectedFileIcon {
+    switch (selectedFileExtension) {
+      case 'pdf':
+        return Icons.picture_as_pdf_rounded;
+
+      case 'doc':
+      case 'docx':
+        return Icons.description_rounded;
+
+      case 'ppt':
+      case 'pptx':
+        return Icons.slideshow_rounded;
+
+      case 'xls':
+      case 'xlsx':
+        return Icons.table_chart_rounded;
+
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+      case 'webp':
+      case 'svg':
+        return Icons.image_rounded;
+
+      case 'mp4':
+      case 'mov':
+      case 'avi':
+      case 'mkv':
+      case 'webm':
+        return Icons.video_file_rounded;
+
+      default:
+        return Icons.insert_drive_file_rounded;
+    }
+  }
+
+  // Get file color based on extension
+  Color get selectedFileColor {
+    switch (selectedFileExtension) {
+      case 'pdf':
+        return const Color(0xFFE53935);
+
+      case 'doc':
+      case 'docx':
+        return const Color(0xFF1976D2);
+
+      case 'ppt':
+      case 'pptx':
+        return const Color(0xFFFF7043);
+
+      case 'xls':
+      case 'xlsx':
+        return const Color(0xFF2E7D32);
+
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+      case 'webp':
+      case 'svg':
+        return const Color(0xFF8E44AD);
+
+      case 'mp4':
+      case 'mov':
+      case 'avi':
+      case 'mkv':
+      case 'webm':
+        return const Color(0xFF00897B);
+
+      default:
+        return const Color(0xFF757575);
+    }
+  }
+
+  // Get display text
+  String get selectedFileLabel {
+    if (_selectedFile == null) {
+      return 'Upload File';
+    }
+
+    return selectedFileName;
+  }
+
   // ============================================================
   // DOWNLOAD RESOURCE
   // ============================================================

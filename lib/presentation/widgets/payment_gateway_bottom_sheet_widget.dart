@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lms/core/api_end_point.dart';
+import 'package:lms/core/colors.dart';
 import 'package:lms/data/model/available_payment_gate_ways/available_payment_gate_ways_model.dart';
 import 'package:lms/presentation/provider/payment_provider.dart';
 import 'package:lms/presentation/screen/razorpay_service.dart';
@@ -54,9 +55,10 @@ void showPaymentGatewayBottomSheet({
     builder: (sheetContext) {
       return Container(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
-        decoration: const BoxDecoration(
-          color: Colors.white,
+        decoration: BoxDecoration(
+          color: AppColor.cardBackground,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border.all(color: AppColor.borderGlassColor),
         ),
         child: SafeArea(
           child: Column(
@@ -87,7 +89,7 @@ void showPaymentGatewayBottomSheet({
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF111827),
+                  color: AppColor.ghostwhite,
                 ),
               ),
 
@@ -95,7 +97,7 @@ void showPaymentGatewayBottomSheet({
 
               Text(
                 'Select a payment gateway to continue',
-                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                style: TextStyle(fontSize: 14, color: AppColor.secondaryText),
               ),
 
               // =====================================================
@@ -179,8 +181,8 @@ Widget _paymentGatewayTile({
             margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
+              color: AppColor.secondaryGlassColor,
+              border: Border.all(color: AppColor.gold, width: 0.2),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Row(
@@ -193,7 +195,7 @@ Widget _paymentGatewayTile({
                   height: 52,
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: AppColor.glassHighlight,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: const Color(0xFFE5E7EB)),
                   ),
@@ -225,7 +227,7 @@ Widget _paymentGatewayTile({
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF111827),
+                          color: AppColor.ghostwhite,
                         ),
                       ),
 
@@ -255,7 +257,7 @@ Widget _paymentGatewayTile({
                           'Secure payment',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey.shade600,
+                            color: AppColor.secondaryText,
                           ),
                         ),
                     ],
@@ -275,7 +277,7 @@ Widget _paymentGatewayTile({
                   const Icon(
                     Icons.arrow_forward_ios_rounded,
                     size: 16,
-                    color: Color(0xFF64748B),
+                    color: AppColor.gold,
                   ),
               ],
             ),

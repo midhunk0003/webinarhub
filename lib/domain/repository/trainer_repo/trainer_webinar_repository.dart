@@ -8,9 +8,15 @@ import 'package:lms/data/model/trainer_full_list_webinar_model/trainer_full_list
 abstract class TrainerWebinarRepository {
   Future<Either<Failure, TrainerFullListWebinarModel>> getAllWebinars(
     String? status,
-    String? search,
-  );
-  Future<Either<Failure, NotificationModel>> getAllNotification(String? isRead);
+    String? search, {
+    required int page,
+    required int pageSize,
+  });
+  Future<Either<Failure, NotificationModel>> getAllNotification(
+    String? isRead, {
+    required int page,
+    required int pageSize,
+  });
   Future<Either<Failure, Success>> makeIsRead(String? notificationId);
   Future<Either<Failure, GetNotificationCountModel>> getNotificationCount();
 }

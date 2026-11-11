@@ -20,10 +20,15 @@ class TrainerAllWebinarImplomentation implements TrainerWebinarRepository {
   @override
   Future<Either<Failure, TrainerFullListWebinarModel>> getAllWebinars(
     String? status,
-    String? search,
-  ) async {
+    String? search, {
+    int page = 1,
+    int pageSize = 5,
+  }) async {
     try {
-      final queryParameters = <String, String>{};
+      final queryParameters = <String, String>{
+        'Page': page.toString(),
+        'PageSize': pageSize.toString(),
+      };
       // Add status only when it has a value
       if (status != null && status.isNotEmpty) {
         queryParameters['Status'] = status;
@@ -64,10 +69,15 @@ class TrainerAllWebinarImplomentation implements TrainerWebinarRepository {
 
   @override
   Future<Either<Failure, NotificationModel>> getAllNotification(
-    String? isRead,
-  ) async {
+    String? isRead, {
+    int page = 1,
+    int pageSize = 5,
+  }) async {
     try {
-      final queryParameters = <String, String>{};
+      final queryParameters = <String, String>{
+        'Page': page.toString(),
+        'PageSize': pageSize.toString(),
+      };
 
       // Add Status only when it has a value
       if (isRead != null) {

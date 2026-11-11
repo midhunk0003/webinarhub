@@ -3,6 +3,7 @@ import 'package:lms/core/failure.dart';
 import 'package:lms/data/model/available_payment_gate_ways/available_payment_gate_ways_model.dart';
 import 'package:lms/data/model/create_payment_order_model/create_payment_order_model.dart';
 import 'package:lms/data/model/login_model/login_model.dart';
+import 'package:lms/data/model/monthly_transation_summery_model/monthly_transation_summery_model.dart';
 import 'package:lms/data/model/payment_history_model/payment_history_model.dart';
 import 'package:lms/data/model/payment_verify_model/payment_verify_model.dart';
 import 'package:lms/data/model/wbinar_permissions_model/wbinar_permissions_model.dart';
@@ -26,5 +27,10 @@ abstract class PaymentRepository {
     int? paymentMethod,
     DateTime? fromDate,
     DateTime? toDate,
+    int page = 1,
+    int pageSize = 7,
   });
+
+  Future<Either<Failure, MonthlyTransationSummeryModel>>
+  getMonthlyTransactionSummary();
 }

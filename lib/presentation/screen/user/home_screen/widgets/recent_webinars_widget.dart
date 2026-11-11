@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import 'package:lms/core/api_end_point.dart';
 import 'package:lms/core/colors.dart';
 import 'package:lms/presentation/provider/user_provider/user_dashboard_provider.dart';
+import 'package:lms/presentation/screen/user/home_screen/widgets/upcomming_webinarcard_widget.dart';
+import 'package:lms/presentation/widgets/common_empty_state_home.dart';
 
 class WebinarList extends StatelessWidget {
   final UserDashboardProvider userDashboardProvider;
@@ -20,7 +22,10 @@ class WebinarList extends StatelessWidget {
         [];
 
     if (webinars.isEmpty) {
-      return const SizedBox.shrink();
+      return WebinarEmptyState(
+        title: 'No Recent Webinars',
+        subTitle: 'New webinars will appear here when available.',
+      );
     }
 
     return SizedBox(

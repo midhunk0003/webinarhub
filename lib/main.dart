@@ -30,6 +30,7 @@ import 'package:lms/presentation/screen/user/certificates/certificates_preview_s
 import 'package:lms/presentation/screen/user/home_screen/user_home_screen.dart';
 import 'package:lms/presentation/screen/user/my_course_screen/course_detail_page.dart';
 import 'package:lms/presentation/screen/user/my_course_screen/lecture_screen.dart';
+import 'package:lms/presentation/screen/user/my_profile_screen/Terms_and_privacy_screen.dart';
 import 'package:lms/presentation/screen/user/my_profile_screen/change_password_screen.dart';
 import 'package:lms/presentation/screen/user/my_profile_screen/contact_us_screen.dart';
 import 'package:lms/presentation/screen/user/my_profile_screen/edit_profile_screen.dart';
@@ -45,27 +46,34 @@ import 'package:provider/provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  setupDependencyInjection();
-  // await FileDownloadService.initialize();
-  // Firebase + FCM should NEVER prevent app startup.
+  // 1. Initialize dependencies safely.
   try {
-    // Firebase
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-    // Register background handler FIRST
-    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-    // Initialize FCM + local notifications
-    await FirebaseMessagingService().initialize();
-    debugPrint('Firebase/FCM initialized successfully');
+    await setupDependencyInjection().timeout(const Duration(seconds: 15));
   } catch (e, stackTrace) {
-    debugPrint('Firebase/FCM initialization failed: $e');
+    debugPrint('Dependency initialization failed: $e');
     debugPrintStack(stackTrace: stackTrace);
 
-    // IMPORTANT:
-    // Do not rethrow.
-    // App continues without Firebase notifications.
+    // Do not continue without required dependencies.
+    runApp(
+      const MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(
+          body: Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Text(
+                'App initialization failed.\nPlease restart the app.',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    return;
   }
+
   runApp(
     DevicePreview(
       enabled: false, // 🔥 set false in production
@@ -74,6 +82,34 @@ void main() async {
       },
     ),
   );
+
+  // 3. Initialize Firebase/FCM separately.
+  // This must not block the first screen.
+  try {
+    await _initializeFirebaseSafely().timeout(const Duration(seconds: 20));
+  } catch (e, stackTrace) {
+    debugPrint('Firebase startup error: $e');
+    debugPrintStack(stackTrace: stackTrace);
+  }
+}
+
+Future<void> _initializeFirebaseSafely() async {
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    ).timeout(const Duration(seconds: 15));
+
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+
+    await FirebaseMessagingService().initialize().timeout(
+      const Duration(seconds: 15),
+    );
+
+    debugPrint('Firebase/FCM initialized successfully');
+  } on Exception catch (e, stackTrace) {
+    debugPrint('Firebase/FCM initialization failed: $e');
+    debugPrintStack(stackTrace: stackTrace);
+  }
 }
 
 @pragma('vm:entry-point')
@@ -83,11 +119,10 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
 
-    print('Background message: ${message.messageId}');
-
-    print('Background data: ${message.data}');
-  } catch (e) {
-    print('Background FCM error: $e');
+    debugPrint('Background message: ${message.messageId}');
+  } catch (e, stackTrace) {
+    debugPrint('Background FCM error: $e');
+    debugPrintStack(stackTrace: stackTrace);
   }
 }
 
@@ -203,6 +238,8 @@ class MyApp extends StatelessWidget {
               return _customPageRoute(ContactUsScreen());
             case '/paymenthistoryscreen':
               return _customPageRoute(PaymentHistoryScreen());
+            case '/termsandprivacyscreen':
+              return _customPageRoute(TermsAndPrivacyScreen());
             default:
               return null;
           }

@@ -434,6 +434,7 @@ class _UserWebinarCourseDetailPageState
           final canJoin = currentUser?.canJoin?.toLowerCase() == 'true';
           final paymentStatusName = currentUser?.paymentStatusName ?? '';
           final enrollmentStatusName = currentUser?.enrollmentStatusName ?? '';
+          final courseAmount = course?.price ?? '';
           // Get data safely
           final resources =
               userCourseProvider.userCourseMeterialListModel?.data ?? [];
@@ -572,7 +573,8 @@ class _UserWebinarCourseDetailPageState
                               // Rating
                               RatingAndStudentEnrollWidget(
                                 isTablet: isTablet,
-                                stundEnrolled: '',
+                                // stundEnrolled: '',
+                                maxParticipants: course.maxParticipants ?? '0',
                                 onTap: () {
                                   if (!permissionProvider.canViewParticipents) {
                                     AppDialogHelper.showPermissionDeniedDialog(
@@ -974,6 +976,18 @@ class _UserWebinarCourseDetailPageState
                                                                       );
                                                                       return;
                                                                     }
+                                                                    if (canPay ==
+                                                                        true) {
+                                                                      AppDialogHelper.showPermissionDeniedDialog(
+                                                                        context:
+                                                                            context,
+                                                                        title:
+                                                                            "Payment Required",
+                                                                        message:
+                                                                            "Please complete your payment to access videos and study materials.",
+                                                                      );
+                                                                      return;
+                                                                    }
                                                                     if (fileUrl ==
                                                                             null ||
                                                                         fileUrl
@@ -987,7 +1001,6 @@ class _UserWebinarCourseDetailPageState
                                                                           ),
                                                                         ),
                                                                       );
-
                                                                       return;
                                                                     }
 
@@ -1198,6 +1211,18 @@ class _UserWebinarCourseDetailPageState
                                                                     "You don't have permission to View materials. Please contact your administrator.",
                                                               );
 
+                                                              return;
+                                                            }
+                                                            if (canPay ==
+                                                                true) {
+                                                              AppDialogHelper.showPermissionDeniedDialog(
+                                                                context:
+                                                                    context,
+                                                                title:
+                                                                    "Payment Required",
+                                                                message:
+                                                                    "Please complete your payment to access videos and study materials.",
+                                                              );
                                                               return;
                                                             }
                                                             print(
@@ -1798,7 +1823,7 @@ class _UserWebinarCourseDetailPageState
                                     userCourseProvider.isLoadingJoinData
                                         ? 'Please wait...'
                                         : canPay
-                                        ? 'Pay Now'
+                                        ? 'Pay Now  ${courseAmount} Rs'
                                         : 'Join',
 
                                 onTap:
@@ -1866,6 +1891,12 @@ class _UserWebinarCourseDetailPageState
                                                       ?.meetingUrl ??
                                                   '';
 
+                                              final userNameApi =
+                                                  userCourseProvider
+                                                      .userJoinWebinarModel
+                                                      ?.data
+                                                      ?.userName ??
+                                                  '';
                                               final meetingIdApi =
                                                   userCourseProvider
                                                       .userJoinWebinarModel
@@ -1991,7 +2022,7 @@ class _UserWebinarCourseDetailPageState
                                                             '${meetingIdApi}',
                                                         "meetingPassword":
                                                             '${meetingPassApi}',
-                                                        "userName": userName,
+                                                        "userName": userNameApi,
                                                         "jwt": meetingJwtApi,
                                                       },
                                                     );

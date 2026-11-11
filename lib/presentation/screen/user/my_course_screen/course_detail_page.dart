@@ -93,7 +93,8 @@ class _CourseDetailPageState extends State<CourseDetailPage> {
                 SizedBox(height: 20),
                 RatingAndStudentEnrollWidget(
                   isTablet: _isTablet,
-                  stundEnrolled: '0',
+
+                  maxParticipants: '',
                 ),
                 SizedBox(height: 24),
                 Column(

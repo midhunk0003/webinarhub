@@ -1,113 +1,157 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:lms/core/colors.dart';
-import 'package:lms/presentation/screen/user/home_screen/widgets/home_header_section.dart';
+import 'package:lms/data/model/monthly_transation_summery_model/monthly_transation_summery_model.dart';
 import 'package:lms/presentation/widgets/common_custom_app_bar_widget.dart';
 import 'package:lms/presentation/widgets/reusablebackground/reusablebackground.dart';
 import 'package:provider/provider.dart';
-
 import 'package:lms/presentation/provider/payment_provider.dart';
 
 class PaymentHistoryScreen extends StatefulWidget {
   const PaymentHistoryScreen({super.key});
-
   @override
   State<PaymentHistoryScreen> createState() => _PaymentHistoryScreenState();
 }
 
 class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
   final TextEditingController _searchController = TextEditingController();
-
+  final ScrollController _historyScrollController = ScrollController();
   Timer? _debounce;
-
   int? _selectedStatus;
   int? _selectedPaymentMethod;
-
   String _selectedDate = 'This month';
-
   DateTime? _fromDate;
   DateTime? _toDate;
-
   static const Color _background = Color(0xFF000000);
   static const Color _surface = Color(0xFF171717);
   static const Color _sheet = Color(0xFF303030);
-  static const Color _primary = Color(0xFFD5E3FF);
+  static const Color _primary = AppColor.gold;
   static const Color _secondaryText = Color(0xFF9E9E9E);
-
   @override
   void initState() {
     super.initState();
-
+    _historyScrollController.addListener(_onHistoryScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadHistory();
     });
   }
 
-  Future<void> _loadHistory() async {
-    if (!mounted) return;
+  void _onHistoryScroll() {
+    if (!_historyScrollController.hasClients) return;
+    // Load the next page shortly before reaching the bottom.
+    if (_historyScrollController.position.extentAfter < 300) {
+      _loadMoreHistory();
+    }
+  }
 
-    await context.read<PaymentProvider>().paymentHistoryPro(
+  void _checkIfListNeedsMoreData() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_historyScrollController.hasClients) return;
+      final position = _historyScrollController.position;
+      final provider = context.read<PaymentProvider>();
+      // If the first page does not fill the screen, load another page
+      // automatically so the user is not forced to scroll an empty area.
+      if (position.extentAfter < 300 &&
+          !provider.isLoadingPaymentHistory &&
+          !provider.isLoadingMorePaymentHistory &&
+          provider.hasMorePaymentHistory) {
+        _loadMoreHistory();
+      }
+    });
+  }
+
+  Future<void> _loadMoreHistory() async {
+    if (!mounted) return;
+    final provider = context.read<PaymentProvider>();
+    if (provider.isLoadingPaymentHistory ||
+        provider.isLoadingMorePaymentHistory ||
+        !provider.hasMorePaymentHistory) {
+      return;
+    }
+    await provider.paymentHistoryPro(
       search: _searchController.text.trim(),
       status: _selectedStatus,
       paymentMethod: _selectedPaymentMethod,
       fromDate: _fromDate,
       toDate: _toDate,
+      loadMore: true,
     );
+  }
+
+  Future<void> _loadHistory() async {
+    if (!mounted) return;
+    final provider = context.read<PaymentProvider>();
+    await Future.wait([
+      provider.paymentHistoryPro(
+        search: _searchController.text.trim(),
+        status: _selectedStatus,
+        paymentMethod: _selectedPaymentMethod,
+        fromDate: _fromDate,
+        toDate: _toDate,
+      ),
+      provider.getMonthlySummaryPro(),
+    ]);
   }
 
   void _onSearchChanged(String value) {
     _debounce?.cancel();
-
     _debounce = Timer(const Duration(milliseconds: 500), _loadHistory);
   }
 
   void _selectDateRange(String value) {
     final now = DateTime.now();
-
     setState(() {
       _selectedDate = value;
-
       switch (value) {
         case 'This month':
           _fromDate = DateTime(now.year, now.month, 1);
           _toDate = DateTime(now.year, now.month + 1, 1);
           break;
-
         case 'Last 30 days':
           _fromDate = DateTime(
             now.year,
             now.month,
             now.day,
           ).subtract(const Duration(days: 29));
-
           _toDate = DateTime(now.year, now.month, now.day + 1);
           break;
-
         case 'Last 90 days':
           _fromDate = DateTime(
             now.year,
             now.month,
             now.day,
           ).subtract(const Duration(days: 89));
-
           _toDate = DateTime(now.year, now.month, now.day + 1);
           break;
-
         default:
           _fromDate = null;
           _toDate = null;
       }
     });
-
     _loadHistory();
+  }
+
+  MonthlySummeryDataList? _getMonthlySummary(
+    PaymentProvider provider,
+    String monthKey,
+  ) {
+    for (final summary in provider.monthlySummaryItems) {
+      final key = '${summary.year}-${summary.month.toString().padLeft(2, '0')}';
+
+      if (key == monthKey) {
+        return summary;
+      }
+    }
+
+    return null;
   }
 
   @override
   void dispose() {
     _debounce?.cancel();
     _searchController.dispose();
+    _historyScrollController.dispose();
     super.dispose();
   }
 
@@ -117,7 +161,6 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final bool isTablet = constraints.maxWidth >= 600;
-
           return Column(
             children: [
               SizedBox(height: isTablet ? 80 : 66),
@@ -137,7 +180,6 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
                 },
                 showShareButton: false,
               ),
-
               const SizedBox(height: 18),
               // ==================================================
               // SEARCH BAR
@@ -160,8 +202,8 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
                         child: CircularProgressIndicator(color: _primary),
                       );
                     }
-
-                    if (provider.failure != null) {
+                    final items = provider.paymentHistoryItems ?? <dynamic>[];
+                    if (provider.failure != null && items.isEmpty) {
                       return Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
@@ -185,16 +227,12 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
                         ),
                       );
                     }
-
-                    // Replace this with the actual public list getter
-                    // exposed by your PaymentProvider.
-                    final items = provider.items?.data?.items ?? [];
-
                     if (items.isEmpty) {
                       return RefreshIndicator(
                         color: _primary,
                         onRefresh: _loadHistory,
                         child: ListView(
+                          controller: _historyScrollController,
                           children: const [
                             SizedBox(height: 120),
                             Icon(
@@ -223,11 +261,50 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
                         ),
                       );
                     }
+                    final groupedPayments = _groupPaymentsByMonth(items);
+                    final List<Widget> historyWidgets = [];
+
+                    for (final entry in groupedPayments.entries) {
+                      historyWidgets.add(
+                        _buildMonthHeader(entry.key, entry.value, provider),
+                      );
+                      for (final payment in entry.value) {
+                        historyWidgets.add(_buildTransactionItem(payment));
+
+                        historyWidgets.add(
+                          Divider(
+                            color: Colors.white.withOpacity(0.10),
+                            height: 1,
+                          ),
+                        );
+                      }
+                    }
+
+                    if (provider.hasMorePaymentHistory) {
+                      historyWidgets.add(
+                        Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Center(
+                            child:
+                                provider.isLoadingMorePaymentHistory
+                                    ? const CircularProgressIndicator(
+                                      color: _primary,
+                                    )
+                                    : const SizedBox(height: 10),
+                          ),
+                        ),
+                      );
+                    }
 
                     return RefreshIndicator(
                       color: _primary,
                       onRefresh: _loadHistory,
-                      child: _buildGroupedTransactions(items),
+                      child: ListView(
+                        controller: _historyScrollController,
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.only(bottom: 100),
+                        children: historyWidgets,
+                      ),
                     );
                   },
                 ),
@@ -239,33 +316,212 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
     );
   }
 
-  Widget _buildSearchBar() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        height: 54,
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.white24),
-          borderRadius: BorderRadius.circular(30),
-        ),
-        child: TextField(
-          controller: _searchController,
-          onChanged: _onSearchChanged,
-          style: const TextStyle(color: Colors.white),
-          decoration: InputDecoration(
-            hintText: 'Search transactions',
-            hintStyle: const TextStyle(color: _secondaryText),
-            prefixIcon: const Icon(Icons.search, color: _secondaryText),
-            suffixIcon: IconButton(
-              onPressed: () {
-                _searchController.clear();
-                _onSearchChanged('');
-              },
-              icon: const Icon(Icons.close, color: _secondaryText),
+  DateTime? _getTransactionDate(dynamic item) {
+    final dynamic value = item.paidAt ?? item.createdAt;
+    if (value == null) return null;
+    return DateTime.tryParse(value.toString())?.toLocal();
+  }
+
+  String _getMonthKey(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}';
+  }
+
+  Map<String, List<dynamic>> _groupPaymentsByMonth(List<dynamic> items) {
+    final Map<String, List<dynamic>> grouped = {};
+    for (final item in items) {
+      final date = _getTransactionDate(item);
+      if (date == null) continue;
+      final key = _getMonthKey(date);
+      grouped.putIfAbsent(key, () => <dynamic>[]).add(item);
+    }
+    final sortedKeys = grouped.keys.toList()..sort((a, b) => b.compareTo(a));
+    final Map<String, List<dynamic>> sortedGrouped = {};
+    for (final key in sortedKeys) {
+      final monthItems = grouped[key]!;
+      monthItems.sort((a, b) {
+        final dateA = _getTransactionDate(a);
+        final dateB = _getTransactionDate(b);
+        if (dateA == null || dateB == null) return 0;
+        return dateB.compareTo(dateA);
+      });
+      sortedGrouped[key] = monthItems;
+    }
+    return sortedGrouped;
+  }
+
+  double _getPaidMonthTotal(List<dynamic> items) {
+    double total = 0;
+    for (final item in items) {
+      final status = int.tryParse(item.status?.toString() ?? '') ?? 0;
+      if (status == 4) {
+        total += double.tryParse(item.amount?.toString() ?? '') ?? 0;
+      }
+    }
+    return total;
+  }
+
+  Widget _buildMonthHeader(
+    String monthKey,
+    List<dynamic> monthItems,
+    PaymentProvider provider,
+  ) {
+    final summary = _getMonthlySummary(provider, monthKey);
+
+    final parts = monthKey.split('-');
+    final year = parts[0];
+
+    final monthName =
+        summary?.monthName ??
+        DateFormat(
+          'MMMM',
+        ).format(DateTime(int.parse(parts[0]), int.parse(parts[1])));
+
+    final totalAmount = double.tryParse(summary?.totalAmount ?? '') ?? 0.0;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF171717),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  year,
+                  style: const TextStyle(
+                    color: Color(0xFF9E9E9E),
+                    fontSize: 15,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  monthName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 27,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ],
             ),
-            border: InputBorder.none,
-            contentPadding: const EdgeInsets.symmetric(vertical: 16),
           ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              '${summary?.currency ?? 'INR'} ${totalAmount.toStringAsFixed(2)}',
+              textAlign: TextAlign.end,
+              style: const TextStyle(
+                color: Color(0xFF69D69B),
+                fontSize: 19,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTransactionItem(dynamic item) {
+    final int status = int.tryParse(item.status?.toString() ?? '') ?? 0;
+    final String title = item.webinarTitle?.toString() ?? 'Webinar';
+    final String currency = item.currency?.toString() ?? 'INR';
+    final double amount = double.tryParse(item.amount?.toString() ?? '') ?? 0;
+    final String statusLabel = item.statusName?.toString() ?? 'Unknown';
+    final Color color = _statusColor(status);
+    final dynamic dateValue = item.paidAt ?? item.createdAt;
+    String dateLabel = 'Date unavailable';
+    if (dateValue != null) {
+      final parsedDate = DateTime.tryParse(dateValue.toString());
+      if (parsedDate != null) {
+        dateLabel = DateFormat('d MMMM').format(parsedDate.toLocal());
+      }
+    }
+    return InkWell(
+      onTap: () => _showTransactionDetails(item),
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              height: 52,
+              width: 52,
+              decoration: BoxDecoration(
+                color: const Color(0xFF242424),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white12),
+              ),
+              child: const Icon(
+                Icons.receipt_long_outlined,
+                color: Colors.white70,
+                size: 25,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    dateLabel,
+                    style: const TextStyle(color: _secondaryText, fontSize: 13),
+                  ),
+                  const SizedBox(height: 7),
+                  Row(
+                    children: [
+                      Icon(
+                        status == 4
+                            ? Icons.check_circle
+                            : status == 5
+                            ? Icons.cancel
+                            : status == 7
+                            ? Icons.error_outline_rounded
+                            : Icons.hourglass_bottom_rounded,
+                        color: color,
+                        size: 15,
+                      ),
+                      const SizedBox(width: 5),
+                      Flexible(
+                        child: Text(
+                          statusLabel,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: color, fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              '$currency ${amount.toStringAsFixed(2)}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -398,7 +654,6 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
       selected: _selectedStatus,
       labelBuilder: (value) => value.$2,
     );
-
     if (value == -1) {
       setState(() => _selectedStatus = null);
     } else if (value != null) {
@@ -406,7 +661,6 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
     } else {
       return;
     }
-
     await _loadHistory();
   }
 
@@ -417,7 +671,6 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
       selected: _selectedPaymentMethod,
       labelBuilder: (value) => value.$2,
     );
-
     if (value == -1) {
       setState(() => _selectedPaymentMethod = null);
     } else if (value != null) {
@@ -425,7 +678,6 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
     } else {
       return;
     }
-
     await _loadHistory();
   }
 
@@ -441,9 +693,7 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
       selected: _selectedDate,
       labelBuilder: (value) => value.$2,
     );
-
     if (value == null) return;
-
     _selectDateRange(value);
   }
 
@@ -454,7 +704,6 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
     required String Function((T, String)) labelBuilder,
   }) {
     T? draft = selected;
-
     return showModalBottomSheet<T>(
       context: context,
       backgroundColor: _sheet,
@@ -492,7 +741,6 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
                     ...options.map((option) {
                       final value = option.$1;
                       final isSelected = draft == value;
-
                       return ListTile(
                         contentPadding: EdgeInsets.zero,
                         title: Row(
@@ -573,213 +821,6 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
     );
   }
 
-  Widget _buildGroupedTransactions(List<dynamic> items) {
-    // Use createdAt when paidAt is absent so failed payments
-    // are also included in their appropriate month.
-    final datedItems =
-        items.where((item) {
-          return item.createdAt != null || item.paidAt != null;
-        }).toList();
-
-    datedItems.sort((a, b) {
-      final aDate = DateTime.tryParse((a.paidAt ?? a.createdAt).toString());
-      final bDate = DateTime.tryParse((b.paidAt ?? b.createdAt).toString());
-
-      return (bDate ?? DateTime(1970)).compareTo(aDate ?? DateTime(1970));
-    });
-
-    final Map<String, List<dynamic>> groups = {};
-
-    for (final item in datedItems) {
-      final rawDate = item.paidAt ?? item.createdAt;
-      final date = DateTime.tryParse(rawDate.toString())?.toLocal();
-
-      if (date == null) continue;
-
-      final key = DateFormat('yyyy-MM').format(date);
-      groups.putIfAbsent(key, () => []).add(item);
-    }
-
-    if (groups.isEmpty) {
-      return const Center(
-        child: Text(
-          'No dated transactions found',
-          style: TextStyle(color: Colors.white70),
-        ),
-      );
-    }
-
-    return ListView(
-      padding: EdgeInsets.zero,
-      children:
-          groups.entries.map((entry) {
-            final date = DateFormat('yyyy-MM').parse(entry.key);
-
-            // This is a signed total of the displayed amounts.
-            // Adjust the sign convention if your backend uses
-            // different accounting rules for failed/refunded payments.
-            final total = entry.value.fold<double>(0, (sum, item) {
-              final amount =
-                  double.tryParse(item.amount?.toString() ?? '0') ?? 0;
-
-              return sum + amount;
-            });
-
-            final currency = entry.value.first.currency?.toString() ?? 'INR';
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  color: const Color(0xFF101010),
-
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            DateFormat('yyyy').format(date),
-                            style: const TextStyle(
-                              color: _secondaryText,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            DateFormat('MMMM').format(date),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 26,
-                              fontWeight: FontWeight.w400,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const Spacer(),
-                      Text(
-                        '$currency ${total.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          color: Color(0xFF69D69B),
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                ...entry.value.map((item) => _buildTransactionTile(item)),
-              ],
-            );
-          }).toList(),
-    );
-  }
-
-  Widget _buildTransactionTile(dynamic item) {
-    final title =
-        item.webinarTitle?.toString().trim().isNotEmpty == true
-            ? item.webinarTitle.toString()
-            : 'Payment transaction';
-
-    final rawDate = item.paidAt ?? item.createdAt;
-    final date = DateTime.tryParse(rawDate.toString())?.toLocal();
-
-    final status = int.tryParse(item.status?.toString() ?? '');
-
-    final amount = double.tryParse(item.amount?.toString() ?? '0') ?? 0;
-
-    final currency = item.currency?.toString() ?? 'INR';
-
-    final dateLabel =
-        date == null ? 'Date unavailable' : DateFormat('d MMMM').format(date);
-
-    final statusLabel =
-        item.statusName?.toString().trim().isNotEmpty == true
-            ? item.statusName.toString()
-            : _statusLabel(status ?? 0);
-
-    final color = _statusColor(status ?? 0);
-
-    return InkWell(
-      onTap: () => _showTransactionDetails(item),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 10),
-        child: Row(
-          children: [
-            Container(
-              height: 52,
-              width: 52,
-              decoration: BoxDecoration(
-                color: const Color(0xFF242424),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white12),
-              ),
-              child: const Icon(
-                Icons.receipt_long_outlined,
-                color: Colors.white70,
-                size: 25,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    dateLabel,
-                    style: const TextStyle(color: _secondaryText, fontSize: 13),
-                  ),
-                  const SizedBox(height: 7),
-                  Row(
-                    children: [
-                      Icon(
-                        status == 1
-                            ? Icons.check_circle
-                            : status == 2
-                            ? Icons.cancel
-                            : Icons.hourglass_bottom_rounded,
-                        color: color,
-                        size: 15,
-                      ),
-                      const SizedBox(width: 5),
-                      Flexible(
-                        child: Text(
-                          statusLabel,
-                          style: TextStyle(color: color, fontSize: 13),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              '$currency ${amount.toStringAsFixed(2)}',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   void _showTransactionDetails(dynamic item) {
     showModalBottomSheet(
       context: context,
@@ -857,9 +898,7 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
 class _WebinarSearchBar extends StatelessWidget {
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
-
   const _WebinarSearchBar({required this.controller, required this.onChanged});
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -876,7 +915,7 @@ class _WebinarSearchBar extends StatelessWidget {
         cursorColor: AppColor.gold,
         textInputAction: TextInputAction.search,
         decoration: InputDecoration(
-          hintText: 'Search webinars...',
+          hintText: 'Search transactions...',
           hintStyle: const TextStyle(color: Colors.white38, fontSize: 14),
           prefixIcon: Icon(
             Icons.search_rounded,
@@ -889,7 +928,6 @@ class _WebinarSearchBar extends StatelessWidget {
               if (value.text.isEmpty) {
                 return const SizedBox.shrink();
               }
-
               return IconButton(
                 onPressed: () {
                   controller.clear();
