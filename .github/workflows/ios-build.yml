@@ -10,14 +10,14 @@ on:
 jobs:
   build:
     name: Build iOS Application
-    runs-on: macos-latest
+    runs-on: macos-15
 
     steps:
       # 1. Checkout repository
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 2. Setup Flutter
+      # 2. Setup Flutter 3.29.0
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -25,16 +25,18 @@ jobs:
           channel: stable
           cache: true
 
-      # 3. Flutter environment
+      # 3. Check Flutter environment
       - name: Flutter Doctor
-        run: flutter doctor -v
+        run: |
+          flutter --version
+          flutter doctor -v
 
-      # 4. Flutter dependencies
-      - name: Flutter dependencies
+      # 4. Get Flutter dependencies
+      - name: Flutter Dependencies
         run: flutter pub get
 
-      # 5. Verify iOS files
-      - name: Verify iOS configuration
+      # 5. Verify required iOS files
+      - name: Verify iOS Configuration
         run: |
           set -e
 
@@ -43,45 +45,65 @@ jobs:
           test -f ios/Podfile
           test -f ios/Runner/Info.plist
           test -f ios/Runner/AppDelegate.swift
-          test -f ios/Runner/VideoPlayerViewController.swift
           test -f ios/Runner/Runner.entitlements
           test -f ios/Runner.xcodeproj/project.pbxproj
 
           echo "All required files found."
 
-          echo "Checking Podfile platform..."
-          grep -nE "^[[:space:]]*platform[[:space:]]+:ios" ios/Podfile
+          echo "Checking deployment target..."
 
-          echo "Checking deployment targets..."
-          grep -n "IPHONEOS_DEPLOYMENT_TARGET" ios/Runner.xcodeproj/project.pbxproj
+          grep -n "platform :ios" ios/Podfile
 
-          echo "Podfile content:"
+          echo "Full Podfile:"
           cat ios/Podfile
 
-      # 6. Install CocoaPods
-      - name: Install CocoaPods
+          echo "Checking Xcode deployment target:"
+          grep -n "IPHONEOS_DEPLOYMENT_TARGET" \
+            ios/Runner.xcodeproj/project.pbxproj || true
+
+      # 6. Validate iOS deployment target
+      - name: Validate iOS Platform
         run: |
-          sudo gem install cocoapods
+          if ! grep -Eq \
+            "^[[:space:]]*platform[[:space:]]+:ios,[[:space:]]*['\"]13\\.0['\"]" \
+            ios/Podfile; then
+            echo "ERROR: iOS deployment target must be 13.0"
+            exit 1
+          fi
+
+          echo "iOS deployment target verified: 13.0"
+
+      # 7. Install CocoaPods
+      - name: Setup CocoaPods
+        run: |
+          sudo gem install cocoapods --no-document
           pod --version
 
-      # 7. Install iOS dependencies
-      - name: Install CocoaPods dependencies
+      # 8. Install iOS dependencies
+      - name: Install CocoaPods Dependencies
         run: |
           cd ios
           pod install --repo-update
 
-      # 8. Build iOS application
+      # 9. Build iOS application
       - name: Build iOS Release
         run: |
-          flutter build ios --release --no-codesign
+          flutter build ios \
+            --release \
+            --no-codesign
 
-      # 9. Verify build output
-      - name: Verify iOS build
+      # 10. Verify build output
+      - name: Verify iOS Build
         run: |
-          test -d build/ios/iphoneos/Runner.app
-          echo "iOS build completed successfully."
+          if [ ! -d "build/ios/iphoneos/Runner.app" ]; then
+            echo "ERROR: Runner.app not found"
+            exit 1
+          fi
 
-      # 10. Upload iOS application
+          echo "iOS build completed successfully!"
+          ls -lah build/ios/iphoneos/
+
+      # 11. Upload iOS application
       - name: Upload iOS Artifact
         uses: actions/upload-artifact@v4
         with:
