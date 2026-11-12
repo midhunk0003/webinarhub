@@ -1,0 +1,61 @@
+
+name: WebinarHub iOS Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      # 1. Checkout project
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Setup Flutter
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.29.0'
+          channel: stable
+          cache: true
+
+      # 3. Check Flutter
+      - name: Flutter Doctor
+        run: flutter doctor -v
+
+      # 4. Install dependencies
+      - name: Flutter dependencies
+        run: flutter pub get
+
+      # 5. Check iOS project
+      - name: Check iOS files
+        run: |
+          test -f ios/Podfile
+          test -f ios/Runner/Info.plist
+          test -f ios/Runner/AppDelegate.swift
+          test -f ios/Runner/VideoPlayerViewController.swift
+          test -f ios/Runner/Runner.entitlements
+
+      # 6. Install CocoaPods
+      - name: Install CocoaPods dependencies
+        run: |
+          cd ios
+          pod install
+
+      # 7. Build iOS
+      - name: Build iOS Release
+        run: flutter build ios --release --no-codesign
+
+      # 8. Upload build artifact
+      - name: Upload iOS App
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebinarHub-iOS-Build
+          path: build/ios/iphoneos/Runner.app
+          if-no-files-found: error
+          retention-days: 7
