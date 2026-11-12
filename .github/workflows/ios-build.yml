@@ -9,10 +9,11 @@ on:
 
 jobs:
   build:
+    name: Build iOS Application
     runs-on: macos-latest
 
     steps:
-      # 1. Checkout project
+      # 1. Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -24,35 +25,64 @@ jobs:
           channel: stable
           cache: true
 
-      # 3. Check Flutter
+      # 3. Flutter environment
       - name: Flutter Doctor
         run: flutter doctor -v
 
-      # 4. Install dependencies
+      # 4. Flutter dependencies
       - name: Flutter dependencies
         run: flutter pub get
 
-      # 5. Check iOS project
-      - name: Check iOS files
+      # 5. Verify iOS files
+      - name: Verify iOS configuration
         run: |
+          set -e
+
+          echo "Checking required files..."
+
           test -f ios/Podfile
           test -f ios/Runner/Info.plist
           test -f ios/Runner/AppDelegate.swift
           test -f ios/Runner/VideoPlayerViewController.swift
           test -f ios/Runner/Runner.entitlements
+          test -f ios/Runner.xcodeproj/project.pbxproj
+
+          echo "All required files found."
+
+          echo "Checking Podfile platform..."
+          grep -nE "^[[:space:]]*platform[[:space:]]+:ios" ios/Podfile
+
+          echo "Checking deployment targets..."
+          grep -n "IPHONEOS_DEPLOYMENT_TARGET" ios/Runner.xcodeproj/project.pbxproj
+
+          echo "Podfile content:"
+          cat ios/Podfile
 
       # 6. Install CocoaPods
+      - name: Install CocoaPods
+        run: |
+          sudo gem install cocoapods
+          pod --version
+
+      # 7. Install iOS dependencies
       - name: Install CocoaPods dependencies
         run: |
           cd ios
-          pod install
+          pod install --repo-update
 
-      # 7. Build iOS
+      # 8. Build iOS application
       - name: Build iOS Release
-        run: flutter build ios --release --no-codesign
+        run: |
+          flutter build ios --release --no-codesign
 
-      # 8. Upload build artifact
-      - name: Upload iOS App
+      # 9. Verify build output
+      - name: Verify iOS build
+        run: |
+          test -d build/ios/iphoneos/Runner.app
+          echo "iOS build completed successfully."
+
+      # 10. Upload iOS application
+      - name: Upload iOS Artifact
         uses: actions/upload-artifact@v4
         with:
           name: WebinarHub-iOS-Build
